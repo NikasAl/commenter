@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Commenter</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- ════════════ Хедер ════════════ -->
+  <header class="app-header">
+    <div class="app-logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      <span class="app-title">Commenter</span>
+    </div>
+    <span class="app-version">v1.0</span>
+  </header>
+
+  <!-- ════════════ Навигация табов ════════════ -->
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="generate">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      <span>Генерация</span>
+    </button>
+    <button class="tab-btn" data-tab="topics">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      <span>Темы</span>
+    </button>
+    <button class="tab-btn" data-tab="settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Настройки</span>
+    </button>
+  </nav>
+
+  <!-- ════════════ Контент табов ════════════ -->
+  <main class="tab-content">
+
+    <!-- ─── Таб «Генерация» ─── -->
+    <section id="tab-generate" class="tab-panel active">
+      <!-- Выбор темы -->
+      <div class="field-group">
+        <label class="field-label" for="topic-select">Тема</label>
+        <div class="select-wrapper">
+          <select id="topic-select" class="field-select">
+            <option value="">— Выберите тему —</option>
+          </select>
+        </div>
+        <p class="field-hint" id="topic-thesis-count"></p>
+      </div>
+
+      <!-- Вставка текста для ответа -->
+      <div class="field-group">
+        <label class="field-label" for="input-text">Текст для ответа</label>
+        <textarea
+          id="input-text"
+          class="field-textarea"
+          rows="4"
+          placeholder="Вставьте сюда комментарий или пост, на который нужно ответить..."
+        ></textarea>
+      </div>
+
+      <!-- Кнопка генерации -->
+      <button id="btn-generate" class="btn btn-primary btn-block">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Сформировать ответ
+      </button>
+
+      <!-- Результат -->
+      <div class="field-group" id="result-group" style="display:none">
+        <label class="field-label">Результат</label>
+        <div id="result-text" class="result-box"></div>
+        <div class="result-actions">
+          <button id="btn-copy" class="btn btn-secondary btn-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Копировать
+          </button>
+          <button id="btn-regenerate" class="btn btn-ghost btn-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Ещё вариант
+          </button>
+        </div>
+      </div>
+
+      <!-- Индикатор загрузки -->
+      <div id="loading-indicator" class="loading" style="display:none">
+        <div class="spinner"></div>
+        <span>Генерирую ответ...</span>
+      </div>
+
+      <!-- Ошибка -->
+      <div id="error-box" class="error-box" style="display:none"></div>
+    </section>
+
+    <!-- ─── Таб «Темы» ─── -->
+    <section id="tab-topics" class="tab-panel">
+      <!-- Список тем -->
+      <div class="topics-header">
+        <h3 class="section-title">Темы и тезисы</h3>
+        <button id="btn-add-topic" class="btn btn-primary btn-sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Добавить тему
+        </button>
+      </div>
+      <div id="topics-list" class="topics-list"></div>
+      <div id="topics-empty" class="empty-state">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <p>Нет тем. Создайте первую тему, чтобы начать.</p>
+      </div>
+
+      <!-- Модалка: Редактор темы -->
+      <div id="topic-editor-modal" class="modal" style="display:none">
+        <div class="modal-overlay"></div>
+        <div class="modal-content modal-lg">
+          <div class="modal-header">
+            <h3 id="topic-editor-title">Новая тема</h3>
+            <button class="modal-close" data-close-modal>&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="field-group">
+              <label class="field-label" for="topic-name-input">Название темы</label>
+              <input type="text" id="topic-name-input" class="field-input" placeholder="Например: Экономика, Политика, IT..."/>
+            </div>
+            <div class="separator"></div>
+            <div class="theses-editor-header">
+              <span class="field-label">Тезисы (Вопрос — Ответ)</span>
+              <button id="btn-add-thesis" class="btn btn-secondary btn-sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Добавить тезис
+              </button>
+            </div>
+            <div id="theses-list" class="theses-list"></div>
+            <div id="theses-empty" class="empty-state-sm">
+              <p>Нет тезисов. Добавьте вопрос и ответ.</p>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" data-close-modal>Отмена</button>
+            <button id="btn-save-topic" class="btn btn-primary">Сохранить</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Таб «Настройки» ─── -->
+    <section id="tab-settings" class="tab-panel">
+      <div class="field-group">
+        <label class="field-label" for="provider-select">Провайдер LLM</label>
+        <div class="select-wrapper">
+          <select id="provider-select" class="field-select">
+            <option value="z-ai">Z-AI</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="api-key-input">API Ключ</label>
+        <input type="password" id="api-key-input" class="field-input" placeholder="Вставьте API ключ..."/>
+        <p class="field-hint">Ключ хранится локально в браузере и никуда не отправляется.</p>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="model-select">Модель</label>
+        <div class="select-wrapper">
+          <select id="model-select" class="field-select">
+            <option value="">— Сначала выберите провайдера —</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="custom-model-input">Или введите своё название модели</label>
+        <input type="text" id="custom-model-input" class="field-input" placeholder="Например: meta-llama/llama-3.1-8b-instruct"/>
+      </div>
+
+      <button id="btn-save-settings" class="btn btn-primary btn-block">Сохранить настройки</button>
+
+      <div id="settings-saved-toast" class="toast" style="display:none">Настройки сохранены</div>
+    </section>
+
+  </main>
+
+  <!-- Скрипты -->
+  <script src="../lib/storage.js"></script>
+  <script src="../lib/providers/provider-base.js"></script>
+  <script src="../lib/providers/z-ai.js"></script>
+  <script src="../lib/providers/openrouter.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
