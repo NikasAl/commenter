@@ -410,6 +410,11 @@ body {
   margin-bottom: 12px;
 }
 
+.topics-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .topics-list {
   display: flex;
   flex-direction: column;

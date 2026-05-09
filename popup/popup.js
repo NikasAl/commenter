@@ -40,6 +40,8 @@ const DOM = {
 
   // Темы
   btnAddTopic: $('#btn-add-topic'),
+  btnImportTopics: $('#btn-import-topics'),
+  importFileInput: $('#import-file-input'),
   topicsList: $('#topics-list'),
   topicsEmpty: $('#topics-empty'),
   topicEditorModal: $('#topic-editor-modal'),
@@ -243,6 +245,10 @@ function setupTopicsTab() {
   DOM.btnAddTopic.addEventListener('click', () => openTopicEditor(null));
   DOM.btnAddThesis.addEventListener('click', () => addThesisRow());
   DOM.btnSaveTopic.addEventListener('click', saveTopic);
+
+  // Импорт из файла
+  DOM.btnImportTopics.addEventListener('click', () => DOM.importFileInput.click());
+  DOM.importFileInput.addEventListener('change', handleImportFile);
 
   // Закрытие модалки
   $$('.modal-overlay, [data-close-modal]').forEach(el => {
@@ -539,6 +545,157 @@ async function saveSettings() {
   const toast = DOM.settingsSavedToast;
   toast.style.display = 'block';
   setTimeout(() => { toast.style.display = 'none'; }, 2000);
+}
+
+// ═══════════════════════════════════════════
+//  ИМПОРТ ИЗ ФАЙЛА
+// ═══════════════════════════════════════════
+
+/**
+ * Парсер текстового файла в формате:
+ *   T:Название темы
+ *   Q:Текст вопроса (может быть многострочным)
+ *   A:Текст ответа (может быть многострочным)
+ *   ...
+ *   (пустая строка между тезисами, новая строка T: = новая тема)
+ */
+function parseTopicsFile(text) {
+  const topics = [];
+  let currentTopic = null;
+  let currentThesis = null;
+  let currentField = null; // 'question' | 'answer'
+
+  const lines = text.split('\n');
+
+  for (const rawLine of lines) {
+    // Определяем тип строки
+    if (rawLine.startsWith('T:')) {
+      // Новая тема — сохранить предыдущий тезис если есть
+      if (currentThesis && currentTopic) {
+        finalizeThesis(currentTopic, currentThesis);
+      }
+      currentTopic = {
+        name: rawLine.slice(2).trim(),
+        theses: [],
+      };
+      currentThesis = null;
+      currentField = null;
+      topics.push(currentTopic);
+      continue;
+    }
+
+    if (rawLine.startsWith('Q:')) {
+      // Сохранить предыдущий тезис
+      if (currentThesis && currentTopic) {
+        finalizeThesis(currentTopic, currentThesis);
+      }
+      currentThesis = {
+        question: rawLine.slice(2).trim(),
+        answer: '',
+      };
+      currentField = 'question';
+      continue;
+    }
+
+    if (rawLine.startsWith('A:')) {
+      currentField = 'answer';
+      if (currentThesis) {
+        currentThesis.answer = rawLine.slice(2).trim();
+      }
+      continue;
+    }
+
+    if (rawLine.trim() === '' || rawLine.startsWith('---')) {
+      // Пустая строка или разделитель — переносим в текущее поле
+      if (currentField && currentThesis) {
+        if (currentField === 'question') {
+          currentThesis.question += '\n';
+        } else if (currentField === 'answer') {
+          currentThesis.answer += '\n';
+        }
+      }
+      continue;
+    }
+
+    // Продолжение многострочного поля
+    if (currentField === 'question' && currentThesis) {
+      currentThesis.question += (currentThesis.question ? '\n' : '') + rawLine;
+    } else if (currentField === 'answer' && currentThesis) {
+      currentThesis.answer += (currentThesis.answer ? '\n' : '') + rawLine;
+    }
+  }
+
+  // Не забываем последний тезис
+  if (currentThesis && currentTopic) {
+    finalizeThesis(currentTopic, currentThesis);
+  }
+
+  return topics.filter(t => t.name && t.theses.length > 0);
+}
+
+function finalizeThesis(topic, thesis) {
+  // Убираем лишние переводы строк по краям, но сохраняем внутренние
+  thesis.question = thesis.question.trim();
+  thesis.answer = thesis.answer.trim();
+  if (thesis.question && thesis.answer) {
+    topic.theses.push({ question: thesis.question, answer: thesis.answer });
+  }
+}
+
+async function handleImportFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  // Сброс input, чтобы можно было снова выбрать тот же файл
+  DOM.importFileInput.value = '';
+
+  try {
+    const text = await file.text();
+    const parsedTopics = parseTopicsFile(text);
+
+    if (parsedTopics.length === 0) {
+      showError('Файл не содержит тем для импорта. Проверьте формат (T:, Q:, A:).');
+      return;
+    }
+
+    let totalTheses = 0;
+    for (const topicData of parsedTopics) {
+      // Проверяем, существует ли тема с таким именем
+      const existingTopics = await Storage.getTopics();
+      const existing = existingTopics.find(t => t.name === topicData.name);
+
+      let topicId;
+      if (existing) {
+        // Дополняем существующую тему
+        topicId = existing.id;
+      } else {
+        // Создаём новую
+        const topic = await Storage.addTopic(topicData.name);
+        topicId = topic.id;
+      }
+
+      // Добавляем тезисы
+      for (const thesis of topicData.theses) {
+        await Storage.addThesis(topicId, thesis.question, thesis.answer);
+        totalTheses++;
+      }
+    }
+
+    await refreshTopics();
+
+    // Показать уведомление
+    showImportToast(`Импортировано: ${parsedTopics.length} тем, ${totalTheses} тезисов`);
+  } catch (err) {
+    showError(`Ошибка импорта: ${err.message}`);
+  }
+}
+
+function showImportToast(message) {
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 2500);
 }
 
 // ═══════════════════════════════════════════
