@@ -3,12 +3,9 @@
  * Обрабатывает API-запросы к LLM провайдерам
  */
 
-// Импорт провайдеров
-importScripts(
-  'lib/providers/provider-base.js',
-  'lib/providers/z-ai.js',
-  'lib/providers/openrouter.js'
-);
+// Импорт провайдеров (ES Modules)
+import { ZAiProvider } from '../lib/providers/z-ai.js';
+import { OpenRouterProvider } from '../lib/providers/openrouter.js';
 
 // Инициализация провайдеров
 const providers = {
