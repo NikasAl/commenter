@@ -41,7 +41,10 @@ const DOM = {
   // Темы
   btnAddTopic: $('#btn-add-topic'),
   btnImportTopics: $('#btn-import-topics'),
-  importFileInput: $('#import-file-input'),
+  importModal: $('#import-modal'),
+  importTextarea: $('#import-textarea'),
+  btnDoImport: $('#btn-do-import'),
+  importErrorBox: $('#import-error-box'),
   topicsList: $('#topics-list'),
   topicsEmpty: $('#topics-empty'),
   topicEditorModal: $('#topic-editor-modal'),
@@ -246,9 +249,14 @@ function setupTopicsTab() {
   DOM.btnAddThesis.addEventListener('click', () => addThesisRow());
   DOM.btnSaveTopic.addEventListener('click', saveTopic);
 
-  // Импорт из файла
-  DOM.btnImportTopics.addEventListener('click', () => DOM.importFileInput.click());
-  DOM.importFileInput.addEventListener('change', handleImportFile);
+  // Импорт из текста
+  DOM.btnImportTopics.addEventListener('click', () => {
+    DOM.importTextarea.value = '';
+    DOM.importErrorBox.style.display = 'none';
+    DOM.importModal.style.display = 'flex';
+    DOM.importTextarea.focus();
+  });
+  DOM.btnDoImport.addEventListener('click', handleImportText);
 
   // Закрытие модалки
   $$('.modal-overlay, [data-close-modal]').forEach(el => {
@@ -454,6 +462,7 @@ async function saveTopic() {
 
 function closeModal() {
   DOM.topicEditorModal.style.display = 'none';
+  DOM.importModal.style.display = 'none';
   state.editingTopicId = null;
   state.editingTheses = [];
 }
@@ -645,21 +654,21 @@ function finalizeThesis(topic, thesis) {
   }
 }
 
-async function handleImportFile(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  // Сброс input, чтобы можно было снова выбрать тот же файл
-  DOM.importFileInput.value = '';
+async function handleImportText() {
+  const text = DOM.importTextarea.value.trim();
+  if (!text) {
+    DOM.importErrorBox.textContent = 'Вставьте текст для импорта.';
+    DOM.importErrorBox.style.display = 'block';
+    return;
+  }
 
   try {
-    const text = await file.text();
-    console.log('[Commenter Import] File size:', text.length, 'chars');
     const parsedTopics = parseTopicsFile(text);
     console.log('[Commenter Import] Parsed:', parsedTopics.length, 'topics', parsedTopics.reduce((s, t) => s + t.theses.length, 0), 'theses');
 
     if (parsedTopics.length === 0) {
-      showTopicsError('Файл не содержит тем для импорта. Проверьте формат (T:, Q:, A:).');
+      DOM.importErrorBox.textContent = 'Не найдено тем в тексте. Проверьте формат: T:, Q:, A:';
+      DOM.importErrorBox.style.display = 'block';
       return;
     }
 
@@ -667,39 +676,35 @@ async function handleImportFile(event) {
     let totalCreated = 0;
     for (const topicData of parsedTopics) {
       try {
-        // Проверяем, существует ли тема с таким именем
         const existingTopics = await Storage.getTopics();
         const existing = existingTopics.find(t => t.name === topicData.name);
 
         let topicId;
         if (existing) {
-          // Дополняем существующую тему
           topicId = existing.id;
         } else {
-          // Создаём новую
           const topic = await Storage.addTopic(topicData.name);
           topicId = topic.id;
           totalCreated++;
         }
 
-        // Добавляем тезисы
         for (const thesis of topicData.theses) {
           await Storage.addThesis(topicId, thesis.question, thesis.answer);
           totalTheses++;
         }
       } catch (innerErr) {
         console.error('[Commenter Import] Error on topic', topicData.name, ':', innerErr);
-        showTopicsError(`Ошибка при импорте темы «${topicData.name}»: ${innerErr.message}`);
       }
     }
 
+    // Закрыть модалку и обновить список
+    DOM.importModal.style.display = 'none';
     await refreshTopics();
-
-    // Показать уведомление
-    showImportToast(`Импортировано: ${totalCreated} новых тем, ${totalTheses} тезисов`);
+    showImportToast(`${totalCreated} новых тем, ${totalTheses} тезисов импортировано`);
   } catch (err) {
     console.error('[Commenter Import] Fatal error:', err);
-    showTopicsError(`Ошибка импорта: ${err.message}`);
+    DOM.importErrorBox.textContent = `Ошибка: ${err.message}`;
+    DOM.importErrorBox.style.display = 'block';
   }
 }
 

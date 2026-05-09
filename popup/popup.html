@@ -99,7 +99,7 @@
       <div class="topics-header">
         <h3 class="section-title">Темы и тезисы</h3>
         <div class="topics-actions">
-          <button id="btn-import-topics" class="btn btn-secondary btn-sm" title="Импорт из текстового файла">
+          <button id="btn-import-topics" class="btn btn-secondary btn-sm" title="Импорт тем и тезисов">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             Импорт
           </button>
@@ -108,7 +108,6 @@
             Добавить тему
           </button>
         </div>
-        <input type="file" id="import-file-input" accept=".txt" style="display:none"/>
       </div>
       <div id="topics-list" class="topics-list"></div>
       <div id="topics-empty" class="empty-state">
@@ -145,6 +144,39 @@
           <div class="modal-footer">
             <button class="btn btn-ghost" data-close-modal>Отмена</button>
             <button id="btn-save-topic" class="btn btn-primary">Сохранить</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модалка: Импорт из текста -->
+      <div id="import-modal" class="modal" style="display:none">
+        <div class="modal-overlay"></div>
+        <div class="modal-content modal-lg">
+          <div class="modal-header">
+            <h3>Импорт тем и тезисов</h3>
+            <button class="modal-close" data-close-modal>&times;</button>
+          </div>
+          <div class="modal-body">
+            <p class="field-hint" style="margin-bottom:10px">
+              Вставьте текст в формате:<br>
+              <code style="color:var(--accent)">T:Название темы</code> →
+              <code style="color:var(--accent)">Q:Вопрос</code> →
+              <code style="color:var(--accent)">A:Ответ</code>
+            </p>
+            <textarea
+              id="import-textarea"
+              class="field-textarea"
+              rows="12"
+              placeholder="T:Название темы&#10;Q:Текст вопроса&#10;A:Текст ответа&#10;&#10;Q:Следующий вопрос&#10;A:Следующий ответ&#10;&#10;T:Другая тема&#10;Q:...&#10;A:..."
+            ></textarea>
+            <div id="import-error-box" class="error-box" style="display:none; margin-top:8px"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" data-close-modal>Отмена</button>
+            <button id="btn-do-import" class="btn btn-primary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              Импортировать
+            </button>
           </div>
         </div>
       </div>
