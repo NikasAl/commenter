@@ -560,6 +560,9 @@ async function saveSettings() {
  *   (пустая строка между тезисами, новая строка T: = новая тема)
  */
 function parseTopicsFile(text) {
+  // Нормализация переносов строк (Windows \r\n, старый Mac \r)
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
   const topics = [];
   let currentTopic = null;
   let currentThesis = null;
@@ -651,42 +654,52 @@ async function handleImportFile(event) {
 
   try {
     const text = await file.text();
+    console.log('[Commenter Import] File size:', text.length, 'chars');
     const parsedTopics = parseTopicsFile(text);
+    console.log('[Commenter Import] Parsed:', parsedTopics.length, 'topics', parsedTopics.reduce((s, t) => s + t.theses.length, 0), 'theses');
 
     if (parsedTopics.length === 0) {
-      showError('Файл не содержит тем для импорта. Проверьте формат (T:, Q:, A:).');
+      showTopicsError('Файл не содержит тем для импорта. Проверьте формат (T:, Q:, A:).');
       return;
     }
 
     let totalTheses = 0;
+    let totalCreated = 0;
     for (const topicData of parsedTopics) {
-      // Проверяем, существует ли тема с таким именем
-      const existingTopics = await Storage.getTopics();
-      const existing = existingTopics.find(t => t.name === topicData.name);
+      try {
+        // Проверяем, существует ли тема с таким именем
+        const existingTopics = await Storage.getTopics();
+        const existing = existingTopics.find(t => t.name === topicData.name);
 
-      let topicId;
-      if (existing) {
-        // Дополняем существующую тему
-        topicId = existing.id;
-      } else {
-        // Создаём новую
-        const topic = await Storage.addTopic(topicData.name);
-        topicId = topic.id;
-      }
+        let topicId;
+        if (existing) {
+          // Дополняем существующую тему
+          topicId = existing.id;
+        } else {
+          // Создаём новую
+          const topic = await Storage.addTopic(topicData.name);
+          topicId = topic.id;
+          totalCreated++;
+        }
 
-      // Добавляем тезисы
-      for (const thesis of topicData.theses) {
-        await Storage.addThesis(topicId, thesis.question, thesis.answer);
-        totalTheses++;
+        // Добавляем тезисы
+        for (const thesis of topicData.theses) {
+          await Storage.addThesis(topicId, thesis.question, thesis.answer);
+          totalTheses++;
+        }
+      } catch (innerErr) {
+        console.error('[Commenter Import] Error on topic', topicData.name, ':', innerErr);
+        showTopicsError(`Ошибка при импорте темы «${topicData.name}»: ${innerErr.message}`);
       }
     }
 
     await refreshTopics();
 
     // Показать уведомление
-    showImportToast(`Импортировано: ${parsedTopics.length} тем, ${totalTheses} тезисов`);
+    showImportToast(`Импортировано: ${totalCreated} новых тем, ${totalTheses} тезисов`);
   } catch (err) {
-    showError(`Ошибка импорта: ${err.message}`);
+    console.error('[Commenter Import] Fatal error:', err);
+    showTopicsError(`Ошибка импорта: ${err.message}`);
   }
 }
 
@@ -696,6 +709,24 @@ function showImportToast(message) {
   toast.textContent = message;
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 2500);
+}
+
+function showTopicsError(message) {
+  // Показываем ошибку в текущей вкладке (Темы), а не в Генерации
+  let errorBox = document.getElementById('topics-error-box');
+  if (!errorBox) {
+    errorBox = document.createElement('div');
+    errorBox.id = 'topics-error-box';
+    errorBox.className = 'error-box';
+    // Вставляем после списка тем
+    const topicsList = document.getElementById('topics-list');
+    if (topicsList && topicsList.parentNode) {
+      topicsList.parentNode.insertBefore(errorBox, topicsList.nextSibling);
+    }
+  }
+  errorBox.textContent = message;
+  errorBox.style.display = 'block';
+  setTimeout(() => { errorBox.style.display = 'none'; }, 5000);
 }
 
 // ═══════════════════════════════════════════
