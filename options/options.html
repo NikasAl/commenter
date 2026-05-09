@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Commenter — Управление</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <!-- ════════════ Хедер ════════════ -->
+  <header class="app-header">
+    <div class="app-logo">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      <span class="app-title">Commenter</span>
+      <span class="app-version">v1.1</span>
+    </div>
+  </header>
+
+  <!-- ════════════ Навигация табов ════════════ -->
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="generate">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      <span>Генерация</span>
+    </button>
+    <button class="tab-btn" data-tab="topics">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      <span>Темы</span>
+    </button>
+    <button class="tab-btn" data-tab="prompt">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      <span>Промпт</span>
+    </button>
+    <button class="tab-btn" data-tab="settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Настройки</span>
+    </button>
+  </nav>
+
+  <!-- ════════════ Контент табов ════════════ -->
+  <main class="tab-content">
+
+    <!-- ─── Таб «Генерация» ─── -->
+    <section id="tab-generate" class="tab-panel active">
+      <div class="field-group">
+        <label class="field-label" for="topic-select">Тема</label>
+        <div class="select-wrapper">
+          <select id="topic-select" class="field-select">
+            <option value="">— Выберите тему —</option>
+          </select>
+        </div>
+        <p class="field-hint" id="topic-thesis-count"></p>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="input-text">Текст для ответа</label>
+        <textarea
+          id="input-text"
+          class="field-textarea"
+          rows="6"
+          placeholder="Вставьте сюда комментарий или пост, на который нужно ответить..."
+        ></textarea>
+      </div>
+
+      <button id="btn-generate" class="btn btn-primary btn-block">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Сформировать ответ
+      </button>
+
+      <div class="field-group" id="result-group" style="display:none">
+        <label class="field-label">Результат</label>
+        <div id="result-text" class="result-box"></div>
+        <div class="result-actions">
+          <button id="btn-copy" class="btn btn-secondary btn-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Копировать
+          </button>
+          <button id="btn-regenerate" class="btn btn-ghost btn-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Ещё вариант
+          </button>
+        </div>
+      </div>
+
+      <div id="loading-indicator" class="loading" style="display:none">
+        <div class="spinner"></div>
+        <span>Генерирую ответ...</span>
+      </div>
+
+      <div id="error-box" class="error-box" style="display:none"></div>
+    </section>
+
+    <!-- ─── Таб «Темы» ─── -->
+    <section id="tab-topics" class="tab-panel">
+      <div class="topics-header">
+        <h3 class="section-title">Темы и тезисы</h3>
+        <div class="topics-actions">
+          <button id="btn-export-topics" class="btn btn-secondary btn-sm" title="Экспорт всех тем в файл">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Экспорт
+          </button>
+          <button id="btn-import-topics" class="btn btn-secondary btn-sm" title="Импорт тем из текста">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Импорт
+          </button>
+          <button id="btn-add-topic" class="btn btn-primary btn-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Добавить тему
+          </button>
+        </div>
+      </div>
+      <div id="topics-list" class="topics-list"></div>
+      <div id="topics-empty" class="empty-state">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <p>Нет тем. Создайте первую тему или импортируйте из текста.</p>
+      </div>
+
+      <!-- Модалка: Редактор темы -->
+      <div id="topic-editor-modal" class="modal" style="display:none">
+        <div class="modal-overlay"></div>
+        <div class="modal-content modal-lg">
+          <div class="modal-header">
+            <h3 id="topic-editor-title">Новая тема</h3>
+            <button class="modal-close" data-close-modal>&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="field-group">
+              <label class="field-label" for="topic-name-input">Название темы</label>
+              <input type="text" id="topic-name-input" class="field-input" placeholder="Например: Экономика, Политика, IT..."/>
+            </div>
+            <div class="separator"></div>
+            <div class="theses-editor-header">
+              <span class="field-label">Тезисы (Вопрос — Ответ)</span>
+              <button id="btn-add-thesis" class="btn btn-secondary btn-sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Добавить тезис
+              </button>
+            </div>
+            <div id="theses-list" class="theses-list"></div>
+            <div id="theses-empty" class="empty-state-sm">
+              <p>Нет тезисов. Добавьте вопрос и ответ.</p>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" data-close-modal>Отмена</button>
+            <button id="btn-save-topic" class="btn btn-primary">Сохранить</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модалка: Импорт -->
+      <div id="import-modal" class="modal" style="display:none">
+        <div class="modal-overlay"></div>
+        <div class="modal-content modal-lg">
+          <div class="modal-header">
+            <h3>Импорт тем и тезисов</h3>
+            <button class="modal-close" data-close-modal>&times;</button>
+          </div>
+          <div class="modal-body">
+            <p class="field-hint" style="margin-bottom:10px">
+              Вставьте текст в формате:
+              <code style="color:var(--accent)">T:Тема</code> →
+              <code style="color:var(--accent)">Q:Вопрос</code> →
+              <code style="color:var(--accent)">A:Ответ</code><br>
+              Дубликаты (одинаковые тема + вопрос) будут пропущены.
+            </p>
+            <textarea
+              id="import-textarea"
+              class="field-textarea"
+              rows="14"
+              placeholder="T:Название темы&#10;Q:Текст вопроса&#10;A:Текст ответа&#10;&#10;Q:Следующий вопрос&#10;A:Следующий ответ&#10;&#10;T:Другая тема&#10;Q:...&#10;A:..."
+            ></textarea>
+            <div id="import-error-box" class="error-box" style="display:none; margin-top:8px"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" data-close-modal>Отмена</button>
+            <button id="btn-do-import" class="btn btn-primary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              Импортировать
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Модалка: Результат импорта -->
+      <div id="import-result-modal" class="modal" style="display:none">
+        <div class="modal-overlay"></div>
+        <div class="modal-content modal-sm">
+          <div class="modal-header">
+            <h3>Результат импорта</h3>
+            <button class="modal-close" data-close-modal>&times;</button>
+          </div>
+          <div class="modal-body" id="import-result-body"></div>
+          <div class="modal-footer">
+            <button class="btn btn-primary" data-close-modal>OK</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Таб «Промпт» ─── -->
+    <section id="tab-prompt" class="tab-panel">
+      <div class="prompt-header">
+        <h3 class="section-title">Системный промпт для генерации</h3>
+        <button id="btn-reset-prompt" class="btn btn-ghost btn-sm">Сбросить по умолчанию</button>
+      </div>
+      <p class="field-hint" style="margin-bottom:12px">
+        Этот промпт отправляется LLM вместе с тезисами выбранной темы. Используйте <code>{{topic}}</code> для подстановки названия темы и <code>{{theses}}</code> для подстановки тезисов.
+      </p>
+      <div class="field-group">
+        <textarea
+          id="system-prompt-editor"
+          class="field-textarea prompt-editor"
+          rows="18"
+        ></textarea>
+      </div>
+      <div class="prompt-preview-header">
+        <span class="field-label">Предпросмотр (с примером)</span>
+      </div>
+      <div class="field-group">
+        <div id="prompt-preview" class="result-box" style="max-height:300px"></div>
+      </div>
+      <button id="btn-save-prompt" class="btn btn-primary btn-block">Сохранить промпт</button>
+      <div id="prompt-saved-toast" class="toast" style="display:none">Промпт сохранён</div>
+    </section>
+
+    <!-- ─── Таб «Настройки» ─── -->
+    <section id="tab-settings" class="tab-panel">
+      <div class="field-group">
+        <label class="field-label" for="provider-select">Провайдер LLM</label>
+        <div class="select-wrapper">
+          <select id="provider-select" class="field-select">
+            <option value="z-ai">Z-AI</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="api-key-input">API Ключ</label>
+        <input type="password" id="api-key-input" class="field-input" placeholder="Вставьте API ключ..."/>
+        <p class="field-hint">Ключ хранится локально в браузере и никуда не отправляется.</p>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="model-select">Модель</label>
+        <div class="select-wrapper">
+          <select id="model-select" class="field-select">
+            <option value="">— Сначала выберите провайдера —</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="custom-model-input">Или введите своё название модели</label>
+        <input type="text" id="custom-model-input" class="field-input" placeholder="Например: meta-llama/llama-3.1-8b-instruct"/>
+      </div>
+
+      <button id="btn-save-settings" class="btn btn-primary btn-block">Сохранить настройки</button>
+      <div id="settings-saved-toast" class="toast" style="display:none">Настройки сохранены</div>
+    </section>
+
+  </main>
+
+  <!-- Скрипты -->
+  <script src="../lib/storage.js"></script>
+  <script type="module" src="options.js"></script>
+</body>
+</html>
