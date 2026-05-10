@@ -4,7 +4,7 @@
  * Хоткеи (при фокусе в поле комментария):
  *   Ctrl+Shift+P  — извлечь контекст поста, собрать промпт, показать в панельке + копировать
  *   Ctrl+Shift+G  — отправить собранный промпт в LLM, вставить результат в поле
- *   Ctrl+Shift+N  — создать новый тезис (из буфера обмена)
+ *   Ctrl+Shift+L  — создать новый тезис (из буфера обмена)
  *
  * Селекторы актуальны для VK (2025 redesign — VKUI / vkit компоненты).
  * Все селекторы основаны на data-testid, НЕ на хэшированных CSS-классах.
@@ -19,7 +19,7 @@
 
   const HOTKEY_PROMPT = 'KeyP';   // Ctrl+Shift+P — сбор промпта
   const HOTKEY_GENERATE = 'KeyG'; // Ctrl+Shift+G — генерация
-  const HOTKEY_NEW_THESIS = 'KeyN'; // Ctrl+Shift+N — новый тезис
+  const HOTKEY_NEW_THESIS = 'KeyL'; // Ctrl+Shift+L — новый тезис
 
   const DEFAULT_SYSTEM_PROMPT = `Ты — эксперт по теме "{{topic}}". Используй приведённые ниже тезисы для формирования ответа. Твой ответ должен быть аргументированным, опираться на тезисы, но звучать естественно, а не как цитата из справочника. Если тезисы не покрывают вопрос полностью, можешь дополнить ответ своими знаниями, но в первую очередь используй тезисы.
 
@@ -341,7 +341,7 @@
         <div class="thesis-status"></div>
       </div>
       <div class="panel-hint">
-        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> — новый тезис &nbsp;
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> — новый тезис &nbsp;
         <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> — промпт &nbsp;
         <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> — генерация
       </div>
