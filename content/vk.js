@@ -4,6 +4,7 @@
  * Хоткеи (при фокусе в поле комментария):
  *   Ctrl+Shift+P  — извлечь контекст поста, собрать промпт, показать в панельке + копировать
  *   Ctrl+Shift+G  — отправить собранный промпт в LLM, вставить результат в поле
+ *   Ctrl+Shift+N  — создать новый тезис (из буфера обмена)
  *
  * Селекторы актуальны для VK (2025 redesign — VKUI / vkit компоненты).
  * Все селекторы основаны на data-testid, НЕ на хэшированных CSS-классах.
@@ -18,6 +19,7 @@
 
   const HOTKEY_PROMPT = 'KeyP';   // Ctrl+Shift+P — сбор промпта
   const HOTKEY_GENERATE = 'KeyG'; // Ctrl+Shift+G — генерация
+  const HOTKEY_NEW_THESIS = 'KeyN'; // Ctrl+Shift+N — новый тезис
 
   const DEFAULT_SYSTEM_PROMPT = `Ты — эксперт по теме "{{topic}}". Используй приведённые ниже тезисы для формирования ответа. Твой ответ должен быть аргументированным, опираться на тезисы, но звучать естественно, а не как цитата из справочника. Если тезисы не покрывают вопрос полностью, можешь дополнить ответ своими знаниями, но в первую очередь используй тезисы.
 
@@ -75,6 +77,12 @@
       event.preventDefault();
       event.stopPropagation();
       handleGenerate();
+    }
+
+    if (event.code === HOTKEY_NEW_THESIS) {
+      event.preventDefault();
+      event.stopPropagation();
+      handleNewThesis();
     }
   }
 
@@ -256,6 +264,184 @@
     updatePanelStatus('Промпт пересобран' + (topicName ? ' — ' + topicName : '') + '. Скопировано!');
 
     console.log('[Commenter] Prompt rebuilt with topic:', topicName || '(none)', '| theses:', thesesText.length, 'chars');
+  }
+
+  // ═══════════════════════════════════════════
+  //  ШАГ 3: НОВЫЙ ТЕЗИС (Ctrl+Shift+N)
+  // ═══════════════════════════════════════════
+
+  async function handleNewThesis() {
+    const topics = await getTopics();
+    const settings = await getSettings();
+    const activeTopicId = settings.activeTopicId || '';
+
+    // Попробовать получить текст из буфера обмена
+    let clipboardText = '';
+    try {
+      clipboardText = await navigator.clipboard.readText();
+    } catch (err) {
+      console.warn('[Commenter] Clipboard read failed:', err);
+    }
+
+    showThesisForm(topics, activeTopicId, clipboardText);
+  }
+
+  function showThesisForm(topics, activeTopicId, clipboardText) {
+    ensurePanel();
+
+    const panel = getPanel();
+    if (!panel) return;
+
+    // Build topic options
+    const optionsHtml = ['<option value="__new__">+ Новая тема</option>']
+      .concat(topics.map(t => {
+        const cnt = (t.theses || []).length;
+        const label = cnt > 0 ? `${t.name} (${cnt} тез.)` : t.name;
+        const selected = t.id === activeTopicId ? ' selected' : '';
+        return `<option value="${escapeHtml(t.id)}"${selected}>${escapeHtml(label)}</option>`;
+      }))
+      .join('');
+
+    const clipPreview = clipboardText
+      ? escapeHtml(clipboardText.slice(0, 300)) + (clipboardText.length > 300 ? '...' : '')
+      : '';
+
+    panel.innerHTML = `
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="panel-badge badge-new">+ Тезис</span>
+          Новый тезис
+        </div>
+        <div class="panel-actions">
+          <button class="panel-btn btn-close-panel">✕</button>
+        </div>
+      </div>
+      <div class="thesis-form">
+        <div class="form-row">
+          <label for="thesis-topic">Тема</label>
+          <select class="form-select" id="thesis-topic">${optionsHtml}</select>
+        </div>
+        <div class="form-row form-row-new-topic" style="display:none">
+          <label for="thesis-new-topic-name">Название темы</label>
+          <input type="text" class="form-input" id="thesis-new-topic-name" placeholder="Название новой темы...">
+        </div>
+        <div class="form-row">
+          <label for="thesis-question">Вопрос</label>
+          <textarea class="form-textarea" id="thesis-question" rows="2" placeholder="Вопрос / тезис...">${clipPreview}</textarea>
+        </div>
+        <div class="form-row">
+          <label for="thesis-answer">Ответ</label>
+          <textarea class="form-textarea" id="thesis-answer" rows="3" placeholder="Ответ / аргумент..."></textarea>
+        </div>
+        ${clipboardText ? `<div class="clipboard-hint">Из буфера обмена вставлен в поле "Вопрос". Переместите текст при необходимости.</div>` : '<div class="clipboard-hint">Буфер обмена пуст. Скопируйте текст на странице (Ctrl+C), затем откройте форму.</div>'}
+        <div class="form-actions">
+          <button class="panel-btn panel-btn-save btn-save-thesis">Сохранить тезис</button>
+          <button class="panel-btn btn-clear-form">Очистить</button>
+        </div>
+        <div class="thesis-status"></div>
+      </div>
+      <div class="panel-hint">
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> — новый тезис &nbsp;
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> — промпт &nbsp;
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> — генерация
+      </div>
+    `;
+
+    // Show/hide new topic input
+    const topicSelect = panel.querySelector('#thesis-topic');
+    const newTopicRow = panel.querySelector('.form-row-new-topic');
+    const newTopicInput = panel.querySelector('#thesis-new-topic-name');
+
+    topicSelect.addEventListener('change', () => {
+      newTopicRow.style.display = topicSelect.value === '__new__' ? '' : 'none';
+      if (topicSelect.value === '__new__') newTopicInput.focus();
+    });
+
+    // Clear form
+    panel.querySelector('.btn-clear-form')?.addEventListener('click', () => {
+      panel.querySelector('#thesis-question').value = '';
+      panel.querySelector('#thesis-answer').value = '';
+      if (topicSelect.value === '__new__') newTopicInput.value = '';
+    });
+
+    // Save thesis
+    panel.querySelector('.btn-save-thesis')?.addEventListener('click', async () => {
+      const question = panel.querySelector('#thesis-question').value.trim();
+      const answer = panel.querySelector('#thesis-answer').value.trim();
+
+      if (!question && !answer) {
+        showThesisStatus(panel, 'Заполните хотя бы одно поле: вопрос или ответ.', 'error');
+        return;
+      }
+
+      let topicId = topicSelect.value;
+      let topicName = '';
+
+      // Create new topic if needed
+      if (topicId === '__new__') {
+        topicName = newTopicInput.value.trim();
+        if (!topicName) {
+          showThesisStatus(panel, 'Введите название новой темы.', 'error');
+          newTopicInput.focus();
+          return;
+        }
+        // Check duplicate topic name
+        if (topics.some(t => t.name.toLowerCase() === topicName.toLowerCase())) {
+          showThesisStatus(panel, 'Тема с таким названием уже существует. Выберите её из списка.', 'error');
+          return;
+        }
+        topicId = generateId();
+        const newTopic = { id: topicId, name: topicName, theses: [] };
+        topics.push(newTopic);
+        console.log('[Commenter] New topic created:', topicName);
+      } else {
+        const topic = topics.find(t => t.id === topicId);
+        if (!topic) {
+          showThesisStatus(panel, 'Тема не найдена. Попробуйте снова.', 'error');
+          return;
+        }
+        topicName = topic.name;
+      }
+
+      // Add thesis to topic
+      const targetTopic = topics.find(t => t.id === topicId);
+      if (!targetTopic.theses) targetTopic.theses = [];
+      const newThesis = {
+        id: generateId(),
+        question: question,
+        answer: answer,
+      };
+      targetTopic.theses.push(newThesis);
+
+      // Save to storage
+      await saveTopics(topics);
+
+      // Update active topic
+      const settings = await getSettings();
+      await saveSettings({ ...settings, activeTopicId: topicId });
+
+      const thesisNum = targetTopic.theses.length;
+      showThesisStatus(panel,
+        `Тезис #${thesisNum} добавлен в тему "${topicName}"`,
+        'success'
+      );
+
+      // Clear fields for quick entry of next thesis
+      panel.querySelector('#thesis-question').value = '';
+      panel.querySelector('#thesis-answer').value = '';
+
+      console.log('[Commenter] Thesis saved:', { topic: topicName, question: question?.slice(0, 60), answer: answer?.slice(0, 60) });
+    });
+
+    // Close
+    panel.querySelector('.btn-close-panel')?.addEventListener('click', hidePanel);
+  }
+
+  function showThesisStatus(panel, text, type) {
+    const statusEl = panel.querySelector('.thesis-status');
+    if (!statusEl) return;
+    statusEl.textContent = text;
+    statusEl.className = 'thesis-status thesis-status-' + type;
   }
 
   // ═══════════════════════════════════════════
@@ -584,6 +770,58 @@
       font-size: 10px; font-weight: 600; color: #71717a; white-space: nowrap;
       padding: 2px 6px; background: rgba(113,113,122,0.1); border-radius: 4px;
     }
+    .badge-new { background: rgba(168,85,247,0.15); color: #c084fc; }
+    .thesis-form {
+      padding: 12px 14px; background: #1a1b1e;
+    }
+    .form-row {
+      margin-bottom: 10px;
+    }
+    .form-row label {
+      display: block; font-size: 11px; font-weight: 600; color: #a1a1aa;
+      margin-bottom: 4px;
+    }
+    .form-select, .form-input {
+      width: 100%; padding: 6px 10px; font-size: 12px; font-weight: 500;
+      color: #e4e4e7; background: #1e1f23; border: 1px solid #3a3b42;
+      border-radius: 5px; font-family: inherit; cursor: pointer;
+      outline: none; appearance: auto;
+    }
+    .form-input { cursor: text; }
+    .form-select:focus, .form-input:focus { border-color: #6366f1; }
+    .form-textarea {
+      width: 100%; padding: 6px 10px; font-size: 12px; line-height: 1.5;
+      color: #e4e4e7; background: #1e1f23; border: 1px solid #3a3b42;
+      border-radius: 5px; font-family: inherit; resize: vertical;
+      outline: none; min-height: 36px;
+    }
+    .form-textarea:focus { border-color: #6366f1; }
+    .form-textarea::placeholder { color: #52525b; }
+    .form-actions {
+      display: flex; gap: 6px; margin-top: 12px;
+    }
+    .panel-btn-save {
+      color: #c084fc !important; border-color: rgba(168,85,247,0.3) !important;
+    }
+    .panel-btn-save:hover {
+      background: rgba(168,85,247,0.15) !important;
+    }
+    .clipboard-hint {
+      margin-top: 8px; padding: 6px 8px; font-size: 11px; color: #71717a;
+      background: #25262b; border-radius: 5px; line-height: 1.5;
+    }
+    .thesis-status {
+      margin-top: 8px; padding: 0; font-size: 11px; font-weight: 600;
+      min-height: 0; transition: all 0.2s;
+    }
+    .thesis-status-success {
+      padding: 6px 8px; color: #22c55e; background: rgba(34,197,94,0.08);
+      border-radius: 5px;
+    }
+    .thesis-status-error {
+      padding: 6px 8px; color: #f87171; background: rgba(239,68,68,0.08);
+      border-radius: 5px;
+    }
   `;
 
   /**
@@ -801,6 +1039,10 @@
            el.matches('[data-testid="content-editable-input"]');
   }
 
+  function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
   function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -837,6 +1079,12 @@
       chrome.storage.local.get('commenter_topics', result => {
         resolve(result.commenter_topics || []);
       });
+    });
+  }
+
+  function saveTopics(topics) {
+    return new Promise(resolve => {
+      chrome.storage.local.set({ commenter_topics: topics }, resolve);
     });
   }
 
