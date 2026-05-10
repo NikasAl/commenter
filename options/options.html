@@ -263,6 +263,16 @@
         <input type="text" id="custom-model-input" class="field-input" placeholder="Например: meta-llama/llama-3.1-8b-instruct"/>
       </div>
 
+      <div class="separator"></div>
+
+      <div class="field-group">
+        <label class="field-label" style="display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer;text-transform:none;letter-spacing:0">
+          <input type="checkbox" id="thesis-auto-select" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+          Автоотбор тезисов
+        </label>
+        <p class="field-hint">При включении LLM автоматически выберет релевантные тезисы к тексту поста. Вы сможете скорректировать выбор вручную. Дополнительный API-запрос при сборе промпта.</p>
+      </div>
+
       <button id="btn-save-settings" class="btn btn-primary btn-block">Сохранить настройки</button>
       <div id="settings-saved-toast" class="toast" style="display:none">Настройки сохранены</div>
     </section>

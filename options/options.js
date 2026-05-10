@@ -74,6 +74,7 @@ const DOM = {
   apiKeyInput: $('#api-key-input'),
   modelSelect: $('#model-select'),
   customModelInput: $('#custom-model-input'),
+  thesisAutoSelect: $('#thesis-auto-select'),
   btnSaveSettings: $('#btn-save-settings'),
   settingsSavedToast: $('#settings-saved-toast'),
 };
@@ -652,6 +653,7 @@ async function loadSettings() {
   DOM.providerSelect.value = settings.provider || 'z-ai';
   DOM.apiKeyInput.value = settings.apiKey || '';
   DOM.customModelInput.value = settings.customModelInput || '';
+  DOM.thesisAutoSelect.checked = !!settings.thesisAutoSelect;
   await updateModelOptions();
   if (settings.model) DOM.modelSelect.value = settings.model;
 }
@@ -686,6 +688,7 @@ async function saveSettings() {
     apiKey: DOM.apiKeyInput.value.trim(),
     model: DOM.modelSelect.value,
     customModelInput: DOM.customModelInput.value.trim(),
+    thesisAutoSelect: DOM.thesisAutoSelect.checked,
     systemPrompt: DOM.systemPromptEditor.value || DEFAULT_SYSTEM_PROMPT,
   };
   await Storage.saveSettings(settings);

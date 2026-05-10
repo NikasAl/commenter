@@ -44,6 +44,11 @@
   let cachedTopics = [];
   let cachedSettings = null;
 
+  // Состояние выбора тезисов
+  let selectedThesisIds = new Set();
+  let currentTopicTheses = [];
+  let isSelectingTheses = false;
+
   // ═══════════════════════════════════════════
   //  ИНИЦИАЛИЗАЦИЯ
   // ═══════════════════════════════════════════
@@ -109,35 +114,42 @@
     const settings = await getSettings();
     const topics = await getTopics();
 
-    // Кэшируем для пересборки при смене темы
+    // Кэшируем
     cachedContext = context;
     cachedTopics = topics;
     cachedSettings = settings;
 
     const activeTopicId = settings.activeTopicId || '';
-    const { topicName, thesesText } = resolveTopic(topics, activeTopicId);
+    const topic = topics.find(t => t.id === activeTopicId);
+    currentTopicTheses = topic ? (topic.theses || []) : [];
 
-    const promptTemplate = settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
-    const systemPrompt = buildSystemPrompt(promptTemplate, topicName || 'Общая тема', thesesText);
-    const userMessage = formatUserMessage(context);
+    // Отрисовываем панель с тезисами
+    if (currentTopicTheses.length > 0) {
+      // Начинаем с «выбраны все»
+      selectedThesisIds = new Set(currentTopicTheses.map(t => t.id));
+      showPromptPanel(context, topics, activeTopicId, topic, currentTopicTheses, selectedThesisIds, false);
 
-    lastBuiltPrompt = { systemPrompt, userMessage, context };
+      // Если автоотбор включён — запускаем LLM-селекцию
+      if (settings.thesisAutoSelect && settings.apiKey) {
+        await runThesisSelection(context, topic, currentTopicTheses);
+      }
+    } else {
+      selectedThesisIds = new Set();
+      // Нет тезисов — показываем обычную панель без селектора
+      const topicName = topic ? topic.name : '';
+      const thesesText = '';
+      const promptTemplate = settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+      const systemPrompt = buildSystemPrompt(promptTemplate, topicName || 'Общая тема', thesesText);
+      const userMessage = formatUserMessage(context);
+      lastBuiltPrompt = { systemPrompt, userMessage, context };
+      const fullPrompt = `[Системный промпт]\n${systemPrompt}\n\n[Контекст поста + сообщение для ответа]\n${userMessage}`;
+      showPanel(topicName, fullPrompt, 'prompt', context, { topics, activeTopicId });
+    }
 
-    const fullPrompt = `[Системный промпт]\n${systemPrompt}\n\n[Контекст поста + сообщение для ответа]\n${userMessage}`;
-
-    showPanel(
-      topicName,
-      fullPrompt,
-      'prompt',
-      context,
-      { topics, activeTopicId }
-    );
-
-    try {
-      await navigator.clipboard.writeText(fullPrompt);
-      updatePanelStatus('Скопировано в буфер обмена!');
-    } catch (err) {
-      console.warn('[Commenter] Clipboard failed:', err);
+    // Копируем
+    if (lastBuiltPrompt) {
+      const fp = `[Системный промпт]\n${lastBuiltPrompt.systemPrompt}\n\n[Контекст поста + сообщение для ответа]\n${lastBuiltPrompt.userMessage}`;
+      try { await navigator.clipboard.writeText(fp); } catch {}
     }
   }
 
@@ -214,56 +226,324 @@
     };
   }
 
+  // ═══════════════════════════════════════════
+  //  ОТБОР ТЕЗИСОВ (LLM)
+  // ═══════════════════════════════════════════
+
+  const SELECT_SYSTEM_PROMPT = 'Ты — помощник по отбору тезисов. Дан пост и список тезисов (нумерованных). Верни ТОЛЬКО номера (через запятую) тех тезисов, которые релевантны для формирования ответа на пост. Если ни один не подходит — верни «0». Без пояснений, только цифры.';
+
+  function buildSelectUserMessage(postText, theses) {
+    let msg = '=== ПОСТ ===\n';
+    msg += postText || '(без текста)';
+    msg += '\n\n=== ТЕЗИСЫ ===\n';
+    theses.forEach((t, i) => {
+      const q = t.question.length > 80 ? t.question.slice(0, 80) + '...' : t.question;
+      const a = t.answer.length > 80 ? t.answer.slice(0, 80) + '...' : t.answer;
+      msg += `${i + 1}. В: ${q} | О: ${a}\n`;
+    });
+    msg += '\nВерни номера релевантных тезисов через запятую:';
+    return msg;
+  }
+
+  function parseThesisSelection(responseText, theses) {
+    const text = responseText.trim();
+    if (!text || text === '0' || text.toLowerCase() === 'none' || text.toLowerCase() === 'нет') {
+      return new Set();
+    }
+    const numbers = text.match(/\d+/g);
+    if (!numbers) return new Set(theses.map(t => t.id));
+    const selected = new Set();
+    for (const numStr of numbers) {
+      const num = parseInt(numStr, 10);
+      if (num >= 1 && num <= theses.length) {
+        selected.add(theses[num - 1].id);
+      }
+    }
+    if (selected.size === 0) return new Set(theses.map(t => t.id));
+    return selected;
+  }
+
+  async function runThesisSelection(context, topic, theses) {
+    if (!theses.length || !cachedSettings?.apiKey || isSelectingTheses) return;
+    isSelectingTheses = true;
+    setThesisSelectorLoading(true);
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'CHAT_REQUEST',
+        payload: {
+          provider: cachedSettings.provider || 'z-ai',
+          apiKey: cachedSettings.apiKey,
+          model: cachedSettings.customModelInput || cachedSettings.model || getDefaultModel(cachedSettings.provider),
+          systemPrompt: SELECT_SYSTEM_PROMPT,
+          userMessage: buildSelectUserMessage(context.postText, theses),
+        },
+      });
+
+      if (response.success) {
+        selectedThesisIds = parseThesisSelection(response.data, theses);
+        console.log('[Commenter] LLM selected', selectedThesisIds.size, 'of', theses.length, 'theses');
+      } else {
+        console.warn('[Commenter] Thesis selection failed:', response.error);
+ }
+    } catch (err) {
+      console.warn('[Commenter] Thesis selection error:', err);
+    }
+
+    isSelectingTheses = false;
+    updateThesisCheckboxes();
+    updatePromptFromSelection();
+    setThesisSelectorLoading(false);
+    updatePanelStatus(`Выбрано ${selectedThesisIds.size} из ${theses.length} тезисов`);
+  }
+
   /**
    * Пересобрать промпт при смене темы в дропдауне.
    */
-  function rebuildPromptWithTopic(topicId) {
+  async function rebuildPromptWithTopic(topicId) {
     if (!cachedContext || !cachedSettings) return;
 
-    const { topicName, thesesText } = resolveTopic(cachedTopics, topicId);
-    const promptTemplate = cachedSettings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
-    const systemPrompt = buildSystemPrompt(promptTemplate, topicName || 'Общая тема', thesesText);
-    const userMessage = formatUserMessage(cachedContext);
+    const topic = cachedTopics.find(t => t.id === topicId);
+    currentTopicTheses = topic ? (topic.theses || []) : [];
 
-    lastBuiltPrompt = { systemPrompt, userMessage, context: cachedContext };
-
-    const fullPrompt = `[Системный промпт]\n${systemPrompt}\n\n[Контекст поста + сообщение для ответа]\n${userMessage}`;
-
-    // Обновляем содержимое панели
+    // Обновляем заголовок и счётчик
     const panel = getPanel();
     if (!panel) return;
 
-    const pre = panel.querySelector('.panel-body pre');
-    if (pre) pre.textContent = fullPrompt;
-
-    // Обновляем заголовок
     const title = panel.querySelector('.panel-title');
     if (title) {
       const badge = title.querySelector('.panel-badge');
       const badgeHtml = badge ? badge.outerHTML : '<span class="panel-badge badge-prompt">Промпт</span>';
       title.innerHTML = badgeHtml + ' ' + escapeHtml(
-        topicName ? 'Тема: ' + topicName : ' (тема не выбрана)'
+        topic ? 'Тема: ' + topic.name : 'Тема не выбрана'
       );
     }
 
-    // Обновляем счётчик тезисов
     const thesesCountEl = panel.querySelector('.topic-theses-count');
     if (thesesCountEl) {
-      const topic = cachedTopics.find(t => t.id === topicId);
-      const count = topic ? (topic.theses || []).length : 0;
+      const count = currentTopicTheses.length;
       thesesCountEl.textContent = count > 0 ? `${count} тез.` : 'нет тезисов';
       thesesCountEl.style.color = count > 0 ? '#4ade80' : '#71717a';
     }
 
-    // Сохраняем выбранную тему как активную
+    // Сохраняем выбранную тему
     saveSettings({ ...cachedSettings, activeTopicId: topicId });
     cachedSettings = { ...cachedSettings, activeTopicId: topicId };
 
-    // Копируем новый промпт
-    navigator.clipboard.writeText(fullPrompt).catch(() => {});
-    updatePanelStatus('Промпт пересобран' + (topicName ? ' — ' + topicName : '') + '. Скопировано!');
+    if (currentTopicTheses.length === 0) {
+      selectedThesisIds = new Set();
+      updateThesisListHtml(panel);
+      updatePromptFromSelection();
+      return;
+    }
 
-    console.log('[Commenter] Prompt rebuilt with topic:', topicName || '(none)', '| theses:', thesesText.length, 'chars');
+    // Обновляем список тезисов с чекбоксами
+    updateThesisListHtml(panel);
+
+    // Если автоотбор — запускаем LLM
+    if (cachedSettings.thesisAutoSelect && cachedSettings.apiKey) {
+      selectedThesisIds = new Set(); // сбрасываем перед LLM
+      updateThesisCheckboxes();
+      updatePromptFromSelection();
+      await runThesisSelection(cachedContext, topic, currentTopicTheses);
+    } else {
+      selectedThesisIds = new Set(currentTopicTheses.map(t => t.id));
+      updateThesisCheckboxes();
+      updatePromptFromSelection();
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  //  ПАНЕЛЬ ПРОМПТА С ЧЕКБОКСАМИ ТЕЗИСОВ
+  // ═══════════════════════════════════════════
+
+  function showPromptPanel(context, topics, activeTopicId, topic, theses, selectedIds, isLoading) {
+    ensurePanel();
+    const panel = getPanel();
+    if (!panel) return;
+
+    // Topic options
+    const optionsHtml = ['<option value="">— без темы —</option>']
+      .concat(topics.map(t => {
+        const cnt = (t.theses || []).length;
+        const label = cnt > 0 ? `${t.name} (${cnt} тез.)` : t.name;
+        const selected = t.id === activeTopicId ? ' selected' : '';
+        return `<option value="${escapeHtml(t.id)}"${selected}>${escapeHtml(label)}</option>`;
+      }))
+      .join('');
+
+    const thesesCount = theses.length;
+    const selectedCount = selectedIds.size;
+    const countColor = thesesCount > 0 ? '#4ade80' : '#71717a';
+    const countText = thesesCount > 0 ? `${thesesCount} тез.` : 'нет тезисов';
+
+    // Thesis items HTML
+    const thesisItemsHtml = theses.map((t, i) => {
+      const checked = selectedIds.has(t.id) ? ' checked' : '';
+      const qShort = escapeHtml(t.question.length > 55 ? t.question.slice(0, 55) + '...' : t.question);
+      const aShort = escapeHtml(t.answer.length > 55 ? t.answer.slice(0, 55) + '...' : t.answer);
+      return `<label class="ts-item${selectedIds.has(t.id) ? ' ts-checked' : ''}">
+        <input type="checkbox" class="ts-cb" data-tid="${escapeHtml(t.id)}"${checked}>
+        <span class="ts-text"><strong>${i + 1}.</strong> В: ${qShort} | О: ${aShort}</span>
+      </label>`;
+    }).join('');
+
+    const loadingHtml = isLoading ? '<span class="ts-loading"><span class="loading-spinner"></span>Анализирую тезисы...</span>' : '';
+
+    panel.innerHTML = `
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="panel-badge badge-prompt">Промпт</span>
+          ${escapeHtml(topic ? 'Тема: ' + topic.name : 'Тема не выбрана')}
+        </div>
+        <div class="panel-actions">
+          <button class="panel-btn panel-btn-primary btn-copy-panel">Копировать</button>
+          <button class="panel-btn btn-close-panel">✕</button>
+        </div>
+      </div>
+      <div class="topic-bar">
+        <label for="topic-selector">Тема:</label>
+        <select class="topic-select" id="topic-selector">${optionsHtml}</select>
+        <span class="topic-theses-count" style="color:${countColor}">${countText}</span>
+      </div>
+      <div class="ts-bar">
+        <span class="ts-title">Тезисы (<span class="ts-count">${selectedCount}</span> из ${thesesCount}):</span>
+        <div class="ts-actions">
+          <button class="panel-btn btn-ts-all">Все</button>
+          <button class="panel-btn btn-ts-none">Снять</button>
+        </div>
+      </div>
+      ${loadingHtml}
+      <div class="ts-list">${thesisItemsHtml}</div>
+      <div class="panel-body"><pre>${escapeHtml('Загрузка...')}</pre></div>
+      <div class="panel-hint">
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> — сбор &nbsp;
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> — генерация &nbsp;
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> — тезис
+      </div>
+    `;
+
+    // Event: topic change
+    panel.querySelector('#topic-selector')?.addEventListener('change', (e) => {
+      rebuildPromptWithTopic(e.target.value);
+    });
+
+    // Event: thesis checkboxes (delegation)
+    panel.querySelector('.ts-list')?.addEventListener('change', (e) => {
+      if (e.target.classList.contains('ts-cb')) {
+        const tid = e.target.dataset.tid;
+        if (e.target.checked) selectedThesisIds.add(tid);
+        else selectedThesisIds.delete(tid);
+        e.target.closest('.ts-item').classList.toggle('ts-checked', e.target.checked);
+        const countEl = panel.querySelector('.ts-count');
+        if (countEl) countEl.textContent = selectedThesisIds.size;
+        updatePromptFromSelection();
+      }
+    });
+
+    // Event: select all / none
+    panel.querySelector('.btn-ts-all')?.addEventListener('click', () => {
+      selectedThesisIds = new Set(currentTopicTheses.map(t => t.id));
+      updateThesisCheckboxes();
+      updatePromptFromSelection();
+    });
+    panel.querySelector('.btn-ts-none')?.addEventListener('click', () => {
+      selectedThesisIds.clear();
+      updateThesisCheckboxes();
+      updatePromptFromSelection();
+    });
+
+    // Event: copy
+    panel.querySelector('.btn-copy-panel')?.addEventListener('click', () => {
+      if (lastBuiltPrompt) {
+        const fp = `[Системный промпт]\n${lastBuiltPrompt.systemPrompt}\n\n[Контекст поста]\n${lastBuiltPrompt.userMessage}`;
+        navigator.clipboard.writeText(fp).catch(() => {});
+        const btn = panel.querySelector('.btn-copy-panel');
+        btn.textContent = 'Скопировано!';
+        btn.classList.add('btn-copied');
+        setTimeout(() => { btn.textContent = 'Копировать'; btn.classList.remove('btn-copied'); }, 1500);
+      }
+    });
+
+    panel.querySelector('.btn-close-panel')?.addEventListener('click', hidePanel);
+
+    // Build initial prompt text
+    updatePromptFromSelection();
+  }
+
+  function updateThesisListHtml(panel) {
+    const listEl = panel?.querySelector('.ts-list');
+    if (!listEl) return;
+    listEl.innerHTML = currentTopicTheses.map((t, i) => {
+      const checked = selectedThesisIds.has(t.id) ? ' checked' : '';
+      const qShort = escapeHtml(t.question.length > 55 ? t.question.slice(0, 55) + '...' : t.question);
+      const aShort = escapeHtml(t.answer.length > 55 ? t.answer.slice(0, 55) + '...' : t.answer);
+      return `<label class="ts-item${selectedThesisIds.has(t.id) ? ' ts-checked' : ''}">
+        <input type="checkbox" class="ts-cb" data-tid="${escapeHtml(t.id)}"${checked}>
+        <span class="ts-text"><strong>${i + 1}.</strong> В: ${qShort} | О: ${aShort}</span>
+      </label>`;
+    }).join('');
+    // Rebind events
+    listEl.addEventListener('change', (e) => {
+      if (e.target.classList.contains('ts-cb')) {
+        const tid = e.target.dataset.tid;
+        if (e.target.checked) selectedThesisIds.add(tid);
+        else selectedThesisIds.delete(tid);
+        e.target.closest('.ts-item').classList.toggle('ts-checked', e.target.checked);
+        const panel = getPanel();
+        const countEl = panel?.querySelector('.ts-count');
+        if (countEl) countEl.textContent = selectedThesisIds.size;
+        updatePromptFromSelection();
+      }
+    });
+    const countEl = panel.querySelector('.ts-count');
+    if (countEl) countEl.textContent = selectedThesisIds.size;
+  }
+
+  function updateThesisCheckboxes() {
+    const panel = getPanel();
+    if (!panel) return;
+    panel.querySelectorAll('.ts-cb').forEach(cb => {
+      const isChecked = selectedThesisIds.has(cb.dataset.tid);
+      cb.checked = isChecked;
+      cb.closest('.ts-item')?.classList.toggle('ts-checked', isChecked);
+    });
+    const countEl = panel.querySelector('.ts-count');
+    if (countEl) countEl.textContent = selectedThesisIds.size;
+  }
+
+  function setThesisSelectorLoading(loading) {
+    const panel = getPanel();
+    if (!panel) return;
+    let el = panel.querySelector('.ts-loading');
+    if (loading && !el) {
+      el = document.createElement('div');
+      el.className = 'ts-loading';
+      el.innerHTML = '<span class="loading-spinner"></span>Анализирую тезисы...';
+      const bar = panel.querySelector('.ts-bar');
+      if (bar) bar.after(el);
+    } else if (!loading && el) {
+      el.remove();
+    }
+  }
+
+  function updatePromptFromSelection() {
+    if (!cachedContext || !cachedSettings) return;
+    const topicName = cachedTopics.find(t => t.id === cachedSettings.activeTopicId)?.name || 'Общая тема';
+    // Фильтруем только выбранные тезисы
+    const selectedTheses = currentTopicTheses.filter(t => selectedThesisIds.has(t.id));
+    const thesesText = formatTheses(selectedTheses);
+    const promptTemplate = cachedSettings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+    const systemPrompt = buildSystemPrompt(promptTemplate, topicName, thesesText);
+    const userMessage = formatUserMessage(cachedContext);
+    lastBuiltPrompt = { systemPrompt, userMessage, context: cachedContext };
+    // Update pre element
+    const panel = getPanel();
+    const pre = panel?.querySelector('.panel-body pre');
+    if (pre) {
+      const fp = `[Системный промпт]\n${systemPrompt}\n\n[Контекст поста + сообщение для ответа]\n${userMessage}`;
+      pre.textContent = fp;
+    }
   }
 
   // ═══════════════════════════════════════════
@@ -770,6 +1050,41 @@
       font-size: 10px; font-weight: 600; color: #71717a; white-space: nowrap;
       padding: 2px 6px; background: rgba(113,113,122,0.1); border-radius: 4px;
     }
+    .ts-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 14px; background: #25262b; border-bottom: 1px solid #3a3b42;
+    }
+    .ts-title { font-size: 11px; font-weight: 600; color: #a1a1aa; }
+    .ts-count { color: #6366f1; font-weight: 700; }
+    .ts-actions { display: flex; gap: 4px; }
+    .ts-actions .panel-btn { font-size: 10px; padding: 2px 6px; }
+    .ts-loading {
+      padding: 6px 14px; font-size: 11px; color: #fbbf24; background: rgba(245,158,11,0.06);
+      border-bottom: 1px solid #3a3b42; display: flex; align-items: center; gap: 6px;
+    }
+    .ts-list {
+      max-height: 180px; overflow-y: auto; background: #1a1b1e;
+      border-bottom: 1px solid #3a3b42;
+    }
+    .ts-item {
+      display: flex; align-items: flex-start; gap: 6px; padding: 5px 14px;
+      border-bottom: 1px solid rgba(58,59,66,0.4); cursor: pointer;
+      transition: background 0.1s;
+    }
+    .ts-item:last-child { border-bottom: none; }
+    .ts-item:hover { background: rgba(99,102,241,0.04); }
+    .ts-item.ts-checked { background: rgba(99,102,241,0.06); }
+    .ts-cb {
+      flex-shrink: 0; width: 13px; height: 13px; margin-top: 2px;
+      accent-color: #6366f1; cursor: pointer;
+    }
+    .ts-text {
+      font-size: 11px; color: #71717a; line-height: 1.35;
+    }
+    .ts-item-checked .ts-text { color: #d4d4d8; }
+    .ts-text strong { color: #a1a1aa; }
+    .ts-item-checked .ts-text strong { color: #e4e4e7; }
+    .ts-disabled .ts-item { opacity: 0.5; pointer-events: none; }
     .badge-new { background: rgba(168,85,247,0.15); color: #c084fc; }
     .thesis-form {
       padding: 12px 14px; background: #1a1b1e;
