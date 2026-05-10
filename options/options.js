@@ -37,6 +37,7 @@ const DOM = {
   topicThesisCount: $('#topic-thesis-count'),
   inputText: $('#input-text'),
   btnGenerate: $('#btn-generate'),
+  btnCopyPrompt: $('#btn-copy-prompt'),
   resultGroup: $('#result-group'),
   resultText: $('#result-text'),
   btnCopy: $('#btn-copy'),
@@ -115,6 +116,7 @@ function switchTab(tab) {
 
 function setupGenerateTab() {
   DOM.btnGenerate.addEventListener('click', handleGenerate);
+  DOM.btnCopyPrompt.addEventListener('click', handleCopyPrompt);
   DOM.btnCopy.addEventListener('click', handleCopy);
   DOM.btnRegenerate.addEventListener('click', handleRegenerate);
   DOM.topicSelect.addEventListener('change', async () => {
@@ -199,6 +201,46 @@ function buildSystemPrompt(template, topicName, theses) {
 
 async function handleRegenerate() {
   if (state.lastUserMessage) await handleGenerate();
+}
+
+/**
+ * Копирует полностью сформированный промпт (системный + пользовательский)
+ * для вставки в сторонний чат (ChatGPT, Claude и т.д.)
+ */
+async function handleCopyPrompt() {
+  const topicId = DOM.topicSelect.value;
+  const userMessage = DOM.inputText.value.trim();
+  if (!topicId) { showError('Выберите тему.'); return; }
+  if (!userMessage) { showError('Вставьте текст для ответа.'); return; }
+
+  const topic = await Storage.getTopicById(topicId);
+  if (!topic) { showError('Тема не найдена.'); return; }
+
+  const settings = await Storage.getSettings();
+  const promptTemplate = settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+  const systemPrompt = buildSystemPrompt(promptTemplate, topic.name, topic.theses);
+
+  // Формируем полный текст для копирования: системный промпт + сообщение пользователя
+  const fullPrompt = `[Системный промпт]\n${systemPrompt}\n\n[Сообщение пользователя]\n${userMessage}`;
+
+  try {
+    await navigator.clipboard.writeText(fullPrompt);
+    const btn = DOM.btnCopyPrompt;
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Скопировано!`;
+    btn.classList.add('btn-copied');
+    setTimeout(() => {
+      btn.innerHTML = originalHTML;
+      btn.classList.remove('btn-copied');
+    }, 2000);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = fullPrompt;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
 }
 
 async function handleCopy() {

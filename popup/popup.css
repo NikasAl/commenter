@@ -103,6 +103,20 @@ body {
   color: var(--text-muted);
 }
 
+.open-options-btn {
+  padding: 5px 10px;
+  font-size: 11px;
+  gap: 5px;
+  color: var(--accent);
+  border: 1px solid var(--accent-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.open-options-btn:hover {
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+}
+
 /* ── Табы ─────────────────────────────────── */
 
 .tabs {

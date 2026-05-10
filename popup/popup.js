@@ -72,6 +72,7 @@ async function init() {
   setupGenerateTab();
   setupTopicsTab();
   setupSettingsTab();
+  setupOpenOptions();
   await refreshTopics();
   await loadSettings();
 }
@@ -737,6 +738,18 @@ function showTopicsError(message) {
 // ═══════════════════════════════════════════
 //  УТИЛИТЫ
 // ═══════════════════════════════════════════
+
+// ── Открытие полной версии ────────────────
+
+function setupOpenOptions() {
+  const btn = document.getElementById('btn-open-options');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      chrome.runtime.openOptionsPage();
+      window.close();
+    });
+  }
+}
 
 function createProvider(providerName) {
   if (providerName === 'openrouter') {

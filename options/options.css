@@ -201,6 +201,21 @@ body {
 .btn-icon:hover { color: var(--text-primary); background: var(--bg-hover); }
 .btn-icon.danger:hover { color: var(--danger); background: var(--danger-subtle); }
 
+/* ── Кнопки генерации ─────────────────────── */
+.generate-actions {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.generate-actions .btn-primary {
+  flex: 1;
+}
+.btn-copied {
+  background: var(--success-subtle) !important;
+  border-color: var(--success) !important;
+  color: var(--success) !important;
+}
+
 /* ── Результат ────────────────────────────── */
 .result-box {
   padding: 14px;
