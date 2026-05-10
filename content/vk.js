@@ -37,6 +37,11 @@
   let panelShadow = null;    // ссылка на shadow root
   let isGenerating = false;
 
+  // Кэш для пересборки промпта при смене темы
+  let cachedContext = null;
+  let cachedTopics = [];
+  let cachedSettings = null;
+
   // ═══════════════════════════════════════════
   //  ИНИЦИАЛИЗАЦИЯ
   // ═══════════════════════════════════════════
@@ -92,20 +97,17 @@
 
     logContext(context);
 
-    // Получить настройки (тема, промпт)
+    // Получить настройки и все темы
     const settings = await getSettings();
-    const activeTopicId = settings.activeTopicId || '';
-    let topicName = '';
-    let thesesText = '';
+    const topics = await getTopics();
 
-    if (activeTopicId) {
-      const topics = await getTopics();
-      const topic = topics.find(t => t.id === activeTopicId);
-      if (topic) {
-        topicName = topic.name;
-        thesesText = formatTheses(topic.theses);
-      }
-    }
+    // Кэшируем для пересборки при смене темы
+    cachedContext = context;
+    cachedTopics = topics;
+    cachedSettings = settings;
+
+    const activeTopicId = settings.activeTopicId || '';
+    const { topicName, thesesText } = resolveTopic(topics, activeTopicId);
 
     const promptTemplate = settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
     const systemPrompt = buildSystemPrompt(promptTemplate, topicName || 'Общая тема', thesesText);
@@ -116,10 +118,11 @@
     const fullPrompt = `[Системный промпт]\n${systemPrompt}\n\n[Контекст поста + сообщение для ответа]\n${userMessage}`;
 
     showPanel(
-      `Промпт собран${topicName ? ' — тема: ' + topicName : ' (тема не выбрана)'}`,
+      topicName,
       fullPrompt,
       'prompt',
-      context
+      context,
+      { topics, activeTopicId }
     );
 
     try {
@@ -185,6 +188,74 @@
     } finally {
       isGenerating = false;
     }
+  }
+
+  // ═══════════════════════════════════════════
+  //  РАБОТА С ТЕМАМИ
+  // ═══════════════════════════════════════════
+
+  function resolveTopic(topics, activeTopicId) {
+    if (!activeTopicId || !topics.length) {
+      return { topicName: '', thesesText: '' };
+    }
+    const topic = topics.find(t => t.id === activeTopicId);
+    if (!topic) return { topicName: '', thesesText: '' };
+    return {
+      topicName: topic.name,
+      thesesText: formatTheses(topic.theses),
+    };
+  }
+
+  /**
+   * Пересобрать промпт при смене темы в дропдауне.
+   */
+  function rebuildPromptWithTopic(topicId) {
+    if (!cachedContext || !cachedSettings) return;
+
+    const { topicName, thesesText } = resolveTopic(cachedTopics, topicId);
+    const promptTemplate = cachedSettings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+    const systemPrompt = buildSystemPrompt(promptTemplate, topicName || 'Общая тема', thesesText);
+    const userMessage = formatUserMessage(cachedContext);
+
+    lastBuiltPrompt = { systemPrompt, userMessage, context: cachedContext };
+
+    const fullPrompt = `[Системный промпт]\n${systemPrompt}\n\n[Контекст поста + сообщение для ответа]\n${userMessage}`;
+
+    // Обновляем содержимое панели
+    const panel = getPanel();
+    if (!panel) return;
+
+    const pre = panel.querySelector('.panel-body pre');
+    if (pre) pre.textContent = fullPrompt;
+
+    // Обновляем заголовок
+    const title = panel.querySelector('.panel-title');
+    if (title) {
+      const badge = title.querySelector('.panel-badge');
+      const badgeHtml = badge ? badge.outerHTML : '<span class="panel-badge badge-prompt">Промпт</span>';
+      title.innerHTML = badgeHtml + ' ' + escapeHtml(
+        topicName ? 'Тема: ' + topicName : ' (тема не выбрана)'
+      );
+    }
+
+    // Обновляем счётчик тезисов
+    const thesesCountEl = panel.querySelector('.topic-theses-count');
+    if (thesesCountEl) {
+      const topic = cachedTopics.find(t => t.id === topicId);
+      const count = topic ? (topic.theses || []).length : 0;
+      thesesCountEl.textContent = count > 0 ? `${count} тез.` : 'нет тезисов';
+      thesesCountEl.style.color = count > 0 ? '#4ade80' : '#71717a';
+    }
+
+    // Сохраняем выбранную тему как активную
+    saveSettings({ ...cachedSettings, activeTopicId: topicId });
+    cachedSettings = { ...cachedSettings, activeTopicId: topicId };
+
+    // Копируем новый промпт
+    navigator.clipboard.writeText(fullPrompt).catch(() => {});
+    updatePanelStatus('Промпт пересобран' + (topicName ? ' — ' + topicName : '') + '. Скопировано!');
+
+    console.log('[Commenter] Prompt rebuilt with topic:', topicName || '(none)', '| theses:', thesesText.length, 'chars');
   }
 
   // ═══════════════════════════════════════════
@@ -495,6 +566,24 @@
     }
     .debug-box strong { color: #a1a1aa; }
     .btn-copied { background: rgba(34,197,94,0.15) !important; color: #22c55e !important; border-color: #22c55e !important; }
+    .topic-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; background: #25262b; border-bottom: 1px solid #3a3b42;
+    }
+    .topic-bar label {
+      font-size: 11px; font-weight: 600; color: #a1a1aa; white-space: nowrap;
+    }
+    .topic-select {
+      flex: 1; padding: 5px 8px; font-size: 12px; font-weight: 500;
+      color: #e4e4e7; background: #1e1f23; border: 1px solid #3a3b42;
+      border-radius: 5px; font-family: inherit; cursor: pointer;
+      outline: none; appearance: auto;
+    }
+    .topic-select:focus { border-color: #6366f1; }
+    .topic-theses-count {
+      font-size: 10px; font-weight: 600; color: #71717a; white-space: nowrap;
+      padding: 2px 6px; background: rgba(113,113,122,0.1); border-radius: 4px;
+    }
   `;
 
   /**
@@ -531,7 +620,7 @@
     return panelShadow.querySelector('.panel');
   }
 
-  function showPanel(title, content, type, context) {
+  function showPanel(title, content, type, context, topicData) {
     ensurePanel();
 
     const panel = getPanel();
@@ -542,6 +631,40 @@
 
     const badgeClass = { prompt: 'badge-prompt', result: 'badge-result', error: 'badge-error', loading: 'badge-loading', info: 'badge-info' }[type] || 'badge-info';
     const badgeText = { prompt: 'Промпт', result: 'Результат', loading: 'Генерация...', error: 'Ошибка', info: 'Info' }[type] || 'Info';
+
+    // ── Тема: заголовок ──
+    const displayTitle = type === 'prompt'
+      ? (title ? 'Тема: ' + title : 'Тема не выбрана')
+      : title;
+
+    // ── Тема: дропдаун ──
+    let topicBarHtml = '';
+    if (type === 'prompt' && topicData && topicData.topics) {
+      const topics = topicData.topics;
+      const activeId = topicData.activeTopicId;
+      const activeTopic = topics.find(t => t.id === activeId);
+      const thesesCount = activeTopic ? (activeTopic.theses || []).length : 0;
+
+      const optionsHtml = ['<option value="">— без темы —</option>']
+        .concat(topics.map(t => {
+          const cnt = (t.theses || []).length;
+          const label = cnt > 0 ? `${t.name} (${cnt} тез.)` : t.name;
+          const selected = t.id === activeId ? ' selected' : '';
+          return `<option value="${escapeHtml(t.id)}"${selected}>${escapeHtml(label)}</option>`;
+        }))
+        .join('');
+
+      const countColor = thesesCount > 0 ? '#4ade80' : '#71717a';
+      const countText = thesesCount > 0 ? `${thesesCount} тез.` : 'нет тезисов';
+
+      topicBarHtml = `
+        <div class="topic-bar">
+          <label for="topic-selector">Тема:</label>
+          <select class="topic-select" id="topic-selector">${optionsHtml}</select>
+          <span class="topic-theses-count" style="color:${countColor}">${countText}</span>
+        </div>
+      `;
+    }
 
     let debugHtml = '';
     if (context) {
@@ -574,7 +697,7 @@
       <div class="panel-header">
         <div class="panel-title">
           <span class="panel-badge ${badgeClass}">${badgeText}</span>
-          ${escapeHtml(title)}
+          ${escapeHtml(displayTitle)}
           ${type === 'loading' ? '<span class="loading-spinner"></span>' : ''}
         </div>
         <div class="panel-actions">
@@ -582,12 +705,21 @@
           <button class="panel-btn btn-close-panel">✕</button>
         </div>
       </div>
+      ${topicBarHtml}
       <div class="panel-body">${debugHtml}<pre>${escapeHtml(content)}</pre></div>
       <div class="panel-hint">
         <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> — собрать промпт &nbsp;
         <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> — генерация
       </div>
     `;
+
+    // Событие смены темы
+    const topicSelect = panel.querySelector('.topic-select');
+    if (topicSelect) {
+      topicSelect.addEventListener('change', (e) => {
+        rebuildPromptWithTopic(e.target.value);
+      });
+    }
 
     // События кнопок
     panel.querySelector('.btn-copy-panel')?.addEventListener('click', () => {
@@ -710,6 +842,12 @@
 
   function getDefaultModel(provider) {
     return provider === 'openrouter' ? 'openai/gpt-4o-mini' : 'glm-4-plus';
+  }
+
+  function saveSettings(settings) {
+    return new Promise(resolve => {
+      chrome.storage.local.set({ commenter_settings: settings }, resolve);
+    });
   }
 
 })();
