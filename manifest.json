@@ -29,5 +29,11 @@
     "service_worker": "background/service-worker.js",
     "type": "module"
   },
-  "content_scripts": []
+  "content_scripts": [
+    {
+      "matches": ["*://vk.com/*"],
+      "js": ["content/vk.js"],
+      "run_at": "document_idle"
+    }
+  ]
 }
