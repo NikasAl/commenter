@@ -27,7 +27,7 @@
 {{theses}}
 === КОНЕЦ ТЕЗИСОВ ===
 
-Формулируй ответ на русском языке. Пиши понятно и лаконично.`;
+Формулируй ответ на русском языке. Пиши понятно и лаконично. Сформулируй ответ на этот пост (и/или на комментарии), используя тезисы из системного промпта.`;
 
   // ═══════════════════════════════════════════
   //  СОСТОЯНИЕ
@@ -110,14 +110,16 @@
 
     logContext(context);
 
-    // Получить настройки и все темы
+    // Получить настройки, темы и шаблоны
     const settings = await getSettings();
     const topics = await getTopics();
+    const templates = await getTemplates();
+    const activeTpl = templates.find(t => t.isActive) || templates[0] || null;
 
     // Кэшируем
     cachedContext = context;
     cachedTopics = topics;
-    cachedSettings = settings;
+    cachedSettings = { ...settings, templates, activeTemplateId: activeTpl?.id || '' };
 
     const activeTopicId = settings.activeTopicId || '';
     const topic = topics.find(t => t.id === activeTopicId);
@@ -138,12 +140,12 @@
       // Нет тезисов — показываем обычную панель без селектора
       const topicName = topic ? topic.name : '';
       const thesesText = '';
-      const promptTemplate = settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+      const promptTemplate = activeTpl?.content || DEFAULT_SYSTEM_PROMPT;
       const systemPrompt = buildSystemPrompt(promptTemplate, topicName || 'Общая тема', thesesText);
       const userMessage = formatUserMessage(context);
       lastBuiltPrompt = { systemPrompt, userMessage, context };
       const fullPrompt = `[Системный промпт]\n${systemPrompt}\n\n[Контекст поста + сообщение для ответа]\n${userMessage}`;
-      showPanel(topicName, fullPrompt, 'prompt', context, { topics, activeTopicId });
+      showPanel(topicName, fullPrompt, 'prompt', context, { topics, activeTopicId, templates, activeTemplateId: activeTpl?.id });
     }
 
     // Копируем
@@ -388,6 +390,16 @@
       </label>`;
     }).join('');
 
+    // Template options
+    const templates = cachedSettings.templates || [];
+    const activeTemplateId = cachedSettings.activeTemplateId || '';
+    const currentActiveTpl = templates.find(t => t.isActive) || templates[0];
+    const tplOptionsHtml = templates.map(t => {
+      const isActive = t.id === (currentActiveTpl?.id) || t.id === activeTemplateId;
+      const selected = isActive ? ' selected' : '';
+      return `<option value="${escapeHtml(t.id)}"${selected}>${isActive ? '\u2605 ' : ''}${escapeHtml(t.name)}</option>`;
+    }).join('');
+
     const loadingHtml = isLoading ? '<span class="ts-loading"><span class="loading-spinner"></span>Анализирую тезисы...</span>' : '';
 
     panel.innerHTML = `
@@ -400,6 +412,10 @@
           <button class="panel-btn panel-btn-primary btn-copy-panel">Копировать</button>
           <button class="panel-btn btn-close-panel">✕</button>
         </div>
+      </div>
+      <div class="tpl-bar">
+        <label for="template-selector">Шаблон:</label>
+        <select class="tpl-select" id="template-selector">${tplOptionsHtml}</select>
       </div>
       <div class="topic-bar">
         <label for="topic-selector">Тема:</label>
@@ -422,6 +438,13 @@
         <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> — тезис
       </div>
     `;
+
+    // Event: template change
+    panel.querySelector('#template-selector')?.addEventListener('change', (e) => {
+      cachedSettings.activeTemplateId = e.target.value;
+      setActiveTemplate(e.target.value);
+      updatePromptFromSelection();
+    });
 
     // Event: topic change
     panel.querySelector('#topic-selector')?.addEventListener('change', (e) => {
@@ -533,7 +556,9 @@
     // Фильтруем только выбранные тезисы
     const selectedTheses = currentTopicTheses.filter(t => selectedThesisIds.has(t.id));
     const thesesText = formatTheses(selectedTheses);
-    const promptTemplate = cachedSettings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+    const templates = cachedSettings.templates || [];
+    const activeTpl = templates.find(t => t.id === cachedSettings.activeTemplateId) || templates.find(t => t.isActive) || templates[0];
+    const promptTemplate = activeTpl?.content || DEFAULT_SYSTEM_PROMPT;
     const systemPrompt = buildSystemPrompt(promptTemplate, topicName, thesesText);
     const userMessage = formatUserMessage(cachedContext);
     lastBuiltPrompt = { systemPrompt, userMessage, context: cachedContext };
@@ -900,6 +925,68 @@
   }
 
   // ═══════════════════════════════════════════
+  //  ХРАНИЛИЩЕ (content script helpers)
+  // ═══════════════════════════════════════════
+
+  async function getSettings() {
+    return new Promise(resolve => {
+      chrome.storage.local.get('commenter_settings', result => {
+        resolve(result.commenter_settings || { provider: 'z-ai', apiKey: '', model: '' });
+      });
+    });
+  }
+
+  async function saveSettings(settings) {
+    return new Promise(resolve => {
+      chrome.storage.local.set({ commenter_settings: settings }, resolve);
+    });
+  }
+
+  async function getTopics() {
+    return new Promise(resolve => {
+      chrome.storage.local.get('commenter_topics', result => {
+        resolve(result.commenter_topics || []);
+      });
+    });
+  }
+
+  async function saveTopics(topics) {
+    return new Promise(resolve => {
+      chrome.storage.local.set({ commenter_topics: topics }, resolve);
+    });
+  }
+
+  async function getTemplates() {
+    return new Promise(async resolve => {
+      const result = await chrome.storage.local.get('commenter_templates');
+      let templates = result.commenter_templates;
+      if (!templates || templates.length === 0) {
+        // Миграция: если шаблонов нет, создать дефолтный
+        templates = [{
+          id: '__default_expert__',
+          name: 'Эксперт (по умолчанию)',
+          content: DEFAULT_SYSTEM_PROMPT,
+          isActive: true,
+        }];
+        await chrome.storage.local.set({ commenter_templates: templates });
+      }
+      resolve(templates);
+    });
+  }
+
+  async function setActiveTemplate(id) {
+    const templates = await getTemplates();
+    templates.forEach(t => { t.isActive = (t.id === id); });
+    return new Promise(resolve => {
+      chrome.storage.local.set({ commenter_templates: templates }, resolve);
+    });
+  }
+
+  function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+  }
+
+  // ═══════════════════════════════════════════
   //  ФОРМИРОВАНИЕ ТЕКСТА
   // ═══════════════════════════════════════════
 
@@ -937,7 +1024,6 @@
       });
     }
 
-    msg += '\n[Задание]\nСформулируй ответ на этот пост (и/или на комментарии), используя тезисы из системного промпта.';
     return msg;
   }
 
@@ -1032,13 +1118,7 @@
     }
     .debug-box strong { color: #a1a1aa; }
     .btn-copied { background: rgba(34,197,94,0.15) !important; color: #22c55e !important; border-color: #22c55e !important; }
-    .topic-bar {
-      display: flex; align-items: center; gap: 8px;
-      padding: 8px 14px; background: #25262b; border-bottom: 1px solid #3a3b42;
-    }
-    .topic-bar label {
-      font-size: 11px; font-weight: 600; color: #a1a1aa; white-space: nowrap;
-    }
+    .topic-bar {\n      display: flex; align-items: center; gap: 8px;\n      padding: 8px 14px; background: #25262b; border-bottom: 1px solid #3a3b42;\n    }\n    .topic-bar label {\n      font-size: 11px; font-weight: 600; color: #a1a1aa; white-space: nowrap;\n    }\n    .tpl-bar {\n      display: flex; align-items: center; gap: 8px;\n      padding: 6px 14px; background: #2a2530; border-bottom: 1px solid #3a3b42;\n    }\n    .tpl-bar label {\n      font-size: 11px; font-weight: 600; color: #c084fc; white-space: nowrap;\n    }\n    .tpl-select {\n      flex: 1; padding: 5px 8px; font-size: 12px; font-weight: 500;\n      color: #e4e4e7; background: #1e1f23; border: 1px solid #3a3b42;\n      border-radius: 5px; font-family: inherit; cursor: pointer;\n      outline: none; appearance: auto;\n    }\n    .tpl-select:focus { border-color: #c084fc; }
     .topic-select {
       flex: 1; padding: 5px 8px; font-size: 12px; font-weight: 500;
       color: #e4e4e7; background: #1e1f23; border: 1px solid #3a3b42;
@@ -1190,6 +1270,24 @@
       ? (title ? 'Тема: ' + title : 'Тема не выбрана')
       : title;
 
+    // ── Шаблон: дропдаун ──
+    let tplBarHtml = '';
+    if (type === 'prompt' && topicData && topicData.templates) {
+      const tplList = topicData.templates;
+      const tplActiveId = topicData.activeTemplateId || '';
+      const tplOptionsHtml = tplList.map(t => {
+        const isActive = t.isActive || t.id === tplActiveId;
+        const selected = isActive ? ' selected' : '';
+        return `<option value="${escapeHtml(t.id)}"${selected}>${isActive ? '\u2605 ' : ''}${escapeHtml(t.name)}</option>`;
+      }).join('');
+      tplBarHtml = `
+        <div class="tpl-bar">
+          <label for="template-selector">Шаблон:</label>
+          <select class="tpl-select" id="template-selector">${tplOptionsHtml}</select>
+        </div>
+      `;
+    }
+
     // ── Тема: дропдаун ──
     let topicBarHtml = '';
     if (type === 'prompt' && topicData && topicData.topics) {
@@ -1258,6 +1356,7 @@
           <button class="panel-btn btn-close-panel">✕</button>
         </div>
       </div>
+      ${tplBarHtml}
       ${topicBarHtml}
       <div class="panel-body">${debugHtml}<pre>${escapeHtml(content)}</pre></div>
       <div class="panel-hint">
@@ -1265,6 +1364,19 @@
         <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> — генерация
       </div>
     `;
+
+    // Событие смены шаблона
+    const tplSelect = panel.querySelector('.tpl-select');
+    if (tplSelect) {
+      tplSelect.addEventListener('change', (e) => {
+        setActiveTemplate(e.target.value);
+        // Пересобрать промпт с новым шаблоном
+        if (cachedSettings) {
+          cachedSettings.activeTemplateId = e.target.value;
+          updatePromptFromSelection();
+        }
+      });
+    }
 
     // Событие смены темы
     const topicSelect = panel.querySelector('.topic-select');

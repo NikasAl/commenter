@@ -8,15 +8,6 @@ import { OpenRouterProvider } from '../lib/providers/openrouter.js';
 
 const Storage = window.Storage;
 
-// ── Дефолтный системный промпт ─────────────
-const DEFAULT_SYSTEM_PROMPT = `Ты — эксперт по теме "{{topic}}". Используй приведённые ниже тезисы для формирования ответа. Твой ответ должен быть аргументированным, опираться на тезисы, но звучать естественно, а не как цитата из справочника. Если тезисы не покрывают вопрос полностью, можешь дополнить ответ своими знаниями, но в первую очередь используй тезисы.
-
-=== ТЕЗИСЫ ===
-{{theses}}
-=== КОНЕЦ ТЕЗИСОВ ===
-
-Формулируй ответ на русском языке. Пиши понятно и лаконично.`;
-
 // ── Состояние ─────────────────────────────
 const state = {
   currentTab: 'generate',
@@ -63,12 +54,20 @@ const DOM = {
   thesesList: $('#theses-list'),
   thesesEmpty: $('#theses-empty'),
   btnSaveTopic: $('#btn-save-topic'),
-  // Промпт
-  systemPromptEditor: $('#system-prompt-editor'),
+  // Шаблоны промптов
+  templatesList: $('#templates-list'),
+  templatesEmpty: $('#templates-empty'),
+  btnAddTemplate: $('#btn-add-template'),
+  templateEditor: $('#template-editor'),
+  templateEditorLabel: $('#template-editor-label'),
+  templateNameInput: $('#template-name-input'),
+  templateContentInput: $('#template-content-input'),
+  btnCloseTemplateEditor: $('#btn-close-template-editor'),
+  btnSaveTemplate: $('#btn-save-template'),
+  btnResetTemplate: $('#btn-reset-template'),
   promptPreview: $('#prompt-preview'),
-  btnSavePrompt: $('#btn-save-prompt'),
-  btnResetPrompt: $('#btn-reset-prompt'),
   promptSavedToast: $('#prompt-saved-toast'),
+  templateSelect: $('#template-select'),
   // Настройки
   providerSelect: $('#provider-select'),
   apiKeyInput: $('#api-key-input'),
@@ -86,11 +85,12 @@ async function init() {
   setupTabs();
   setupGenerateTab();
   setupTopicsTab();
-  setupPromptTab();
+  setupTemplatesTab();
   setupSettingsTab();
   await refreshTopics();
+  await refreshTemplateSelect();
+  await refreshTemplates();
   await loadSettings();
-  await loadPrompt();
 }
 
 // ═══════════════════════════════════════════
@@ -108,7 +108,7 @@ function switchTab(tab) {
   DOM.tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   DOM.tabPanels.forEach(p => p.classList.toggle('active', p.id === `tab-${tab}`));
   if (tab === 'topics') refreshTopics();
-  if (tab === 'prompt') updatePromptPreview();
+  if (tab === 'prompt') refreshTemplates();
 }
 
 // ═══════════════════════════════════════════
@@ -147,6 +147,7 @@ async function refreshTopicSelect() {
 }
 
 async function handleGenerate() {
+  const templateId = DOM.templateSelect.value;
   const topicId = DOM.topicSelect.value;
   const userMessage = DOM.inputText.value.trim();
   if (!topicId) { showError('Выберите тему для генерации ответа.'); return; }
@@ -161,9 +162,18 @@ async function handleGenerate() {
 
   const model = settings.customModelInput || settings.model || getDefaultModel(settings.provider);
 
-  // Получить пользовательский промпт
-  const storedPrompt = await Storage.getSettings();
-  const promptTemplate = storedPrompt.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+  // Получить шаблон промпта
+  let promptTemplate;
+  if (templateId) {
+    const templates = await Storage.getTemplates();
+    const tpl = templates.find(t => t.id === templateId);
+    promptTemplate = tpl ? tpl.content : (await Storage.getActiveTemplate())?.content;
+  } else {
+    const activeTpl = await Storage.getActiveTemplate();
+    promptTemplate = activeTpl ? activeTpl.content : '';
+  }
+  if (!promptTemplate) { showError('Шаблон промпта не найден.'); return; }
+
   const systemPrompt = buildSystemPrompt(promptTemplate, topic.name, topic.theses);
 
   showLoading(true);
@@ -209,6 +219,7 @@ async function handleRegenerate() {
  * для вставки в сторонний чат (ChatGPT, Claude и т.д.)
  */
 async function handleCopyPrompt() {
+  const templateId = DOM.templateSelect.value;
   const topicId = DOM.topicSelect.value;
   const userMessage = DOM.inputText.value.trim();
   if (!topicId) { showError('Выберите тему.'); return; }
@@ -217,8 +228,17 @@ async function handleCopyPrompt() {
   const topic = await Storage.getTopicById(topicId);
   if (!topic) { showError('Тема не найдена.'); return; }
 
-  const settings = await Storage.getSettings();
-  const promptTemplate = settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+  let promptTemplate;
+  if (templateId) {
+    const templates = await Storage.getTemplates();
+    const tpl = templates.find(t => t.id === templateId);
+    promptTemplate = tpl ? tpl.content : (await Storage.getActiveTemplate())?.content;
+  } else {
+    const activeTpl = await Storage.getActiveTemplate();
+    promptTemplate = activeTpl ? activeTpl.content : '';
+  }
+  if (!promptTemplate) { showError('Шаблон промпта не найден.'); return; }
+
   const systemPrompt = buildSystemPrompt(promptTemplate, topic.name, topic.theses);
 
   // Формируем полный текст для копирования: системный промпт + сообщение пользователя
@@ -601,42 +621,172 @@ function showImportResult(stats) {
 }
 
 // ═══════════════════════════════════════════
-//  ТАБ «ПРОМПТ»
+//  ТАБ «ПРОМПТ» — Шаблоны
 // ═══════════════════════════════════════════
 
-function setupPromptTab() {
-  DOM.systemPromptEditor.addEventListener('input', updatePromptPreview);
-  DOM.btnSavePrompt.addEventListener('click', savePrompt);
-  DOM.btnResetPrompt.addEventListener('click', resetPrompt);
+let editingTemplateId = null;
+
+function setupTemplatesTab() {
+  DOM.btnAddTemplate.addEventListener('click', () => openTemplateEditor(null));
+  DOM.btnCloseTemplateEditor.addEventListener('click', closeTemplateEditor);
+  DOM.btnSaveTemplate.addEventListener('click', saveTemplate);
+  DOM.btnResetTemplate.addEventListener('click', resetTemplateToDefault);
+  DOM.templateContentInput?.addEventListener('input', updatePromptPreview);
 }
 
-async function loadPrompt() {
-  const settings = await Storage.getSettings();
-  DOM.systemPromptEditor.value = settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
-  updatePromptPreview();
+async function refreshTemplateSelect() {
+  const templates = await Storage.getTemplates();
+  const activeTpl = templates.find(t => t.isActive) || templates[0];
+  const currentVal = DOM.templateSelect?.value;
+
+  if (DOM.templateSelect) {
+    DOM.templateSelect.innerHTML = '';
+    templates.forEach(tpl => {
+      const opt = document.createElement('option');
+      opt.value = tpl.id;
+      opt.textContent = `${tpl.isActive ? '● ' : ''}${tpl.name}`;
+      DOM.templateSelect.appendChild(opt);
+    });
+    if (currentVal && templates.find(t => t.id === currentVal)) {
+      DOM.templateSelect.value = currentVal;
+    } else if (activeTpl) {
+      DOM.templateSelect.value = activeTpl.id;
+    }
+  }
 }
 
-function updatePromptPreview() {
-  const template = DOM.systemPromptEditor.value;
-  const preview = buildSystemPrompt(template, 'Моя тема', [
-    { question: 'Типичный вопрос оппонента', answer: 'Мой аргументированный ответ' },
-    { question: 'Другой вопрос', answer: 'Другой ответ' },
-  ]);
-  DOM.promptPreview.textContent = preview;
+async function refreshTemplates() {
+  const templates = await Storage.getTemplates();
+  DOM.templatesList.innerHTML = '';
+  DOM.templatesEmpty.style.display = templates.length ? 'none' : 'flex';
+
+  templates.forEach(tpl => {
+    const card = document.createElement('div');
+    card.className = 'template-card' + (tpl.isActive ? ' is-active' : '');
+    const preview = tpl.content.slice(0, 120).replace(/\n/g, ' ').trim() + (tpl.content.length > 120 ? '...' : '');
+    card.innerHTML = `
+      <div class="template-info">
+        <div class="template-name">${escapeHtml(tpl.name)}</div>
+        <div class="template-meta">
+          ${tpl.isActive ? '<span class="template-active-badge">Активный</span>' : ''}
+          <span>${tpl.content.length} симв.</span>
+        </div>
+      </div>
+      <div class="template-actions">
+        ${!tpl.isActive ? `<button class="btn-icon template-activate-btn" title="Сделать активным"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></button>` : ''}
+        <button class="btn-icon template-edit-btn" title="Редактировать">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="btn-icon danger template-delete-btn" title="Удалить">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>
+    `;
+
+    card.querySelector('.template-activate-btn')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await Storage.setActiveTemplate(tpl.id);
+      await refreshTemplates();
+      await refreshTemplateSelect();
+    });
+    card.querySelector('.template-edit-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openTemplateEditor(tpl.id);
+    });
+    card.querySelector('.template-delete-btn').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (confirm(`Удалить шаблон "${tpl.name}"?`)) {
+        await Storage.deleteTemplate(tpl.id);
+        await refreshTemplates();
+        await refreshTemplateSelect();
+      }
+    });
+
+    DOM.templatesList.appendChild(card);
+  });
 }
 
-async function savePrompt() {
-  const prompt = DOM.systemPromptEditor.value;
-  const settings = await Storage.getSettings();
-  settings.systemPrompt = prompt;
-  await Storage.saveSettings(settings);
+function openTemplateEditor(templateId) {
+  editingTemplateId = templateId;
+  DOM.templateEditor.style.display = 'block';
+  DOM.templatesList.style.display = 'none';
+  DOM.templatesEmpty.style.display = 'none';
+  DOM.btnAddTemplate.style.display = 'none';
+
+  if (templateId) {
+    DOM.templateEditorLabel.textContent = 'Редактирование шаблона';
+    // Найти шаблон в DOM-списке
+    Storage.getTemplates().then(templates => {
+      const tpl = templates.find(t => t.id === templateId);
+      if (tpl) {
+        DOM.templateNameInput.value = tpl.name;
+        DOM.templateContentInput.value = tpl.content;
+        updatePromptPreview();
+      }
+    });
+  } else {
+    DOM.templateEditorLabel.textContent = 'Новый шаблон';
+    DOM.templateNameInput.value = '';
+    DOM.templateContentInput.value = `Ты — эксперт по теме "{{topic}}". Используй приведённые ниже тезисы для формирования ответа.
+
+=== ТЕЗИСЫ ===
+{{theses}}
+=== КОНЕЦ ТЕЗИСОВ ===
+
+Формулируй ответ на русском языке.`;
+    updatePromptPreview();
+  }
+  DOM.templateNameInput.focus();
+}
+
+function closeTemplateEditor() {
+  DOM.templateEditor.style.display = 'none';
+  DOM.templatesList.style.display = '';
+  DOM.btnAddTemplate.style.display = '';
+  editingTemplateId = null;
+}
+
+async function saveTemplate() {
+  const name = DOM.templateNameInput.value.trim();
+  const content = DOM.templateContentInput.value;
+  if (!name) { alert('Введите название шаблона.'); return; }
+
+  if (editingTemplateId) {
+    await Storage.updateTemplate(editingTemplateId, name, content);
+  } else {
+    const newTpl = await Storage.addTemplate(name, content);
+    // Если это первый шаблон — сделать активным
+    const templates = await Storage.getTemplates();
+    if (templates.length === 1) {
+      await Storage.setActiveTemplate(newTpl.id);
+    }
+  }
+
+  closeTemplateEditor();
+  await refreshTemplates();
+  await refreshTemplateSelect();
   DOM.promptSavedToast.style.display = 'block';
   setTimeout(() => { DOM.promptSavedToast.style.display = 'none'; }, 2000);
 }
 
-function resetPrompt() {
-  DOM.systemPromptEditor.value = DEFAULT_SYSTEM_PROMPT;
+async function resetTemplateToDefault() {
+  const defaultContent = Storage.DEFAULT_TEMPLATES[0].content;
+  DOM.templateContentInput.value = defaultContent;
+  if (!DOM.templateNameInput.value.trim()) {
+    DOM.templateNameInput.value = Storage.DEFAULT_TEMPLATES[0].name;
+  }
   updatePromptPreview();
+}
+
+function updatePromptPreview() {
+  const template = DOM.templateContentInput?.value || '';
+  const preview = buildSystemPrompt(template, 'Моя тема', [
+    { question: 'Типичный вопрос оппонента', answer: 'Мой аргументированный ответ' },
+    { question: 'Другой вопрос', answer: 'Другой ответ' },
+  ]);
+  if (DOM.promptPreview) {
+    DOM.promptPreview.textContent = preview;
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -646,6 +796,9 @@ function resetPrompt() {
 function setupSettingsTab() {
   DOM.providerSelect.addEventListener('change', () => updateModelOptions());
   DOM.btnSaveSettings.addEventListener('click', saveSettings);
+  DOM.templateSelect?.addEventListener('change', async () => {
+ // При смене шаблона в генерации — не делаем его активным глобально
+  });
 }
 
 async function loadSettings() {
@@ -683,14 +836,12 @@ function fallbackModelOptions(provider) {
 }
 
 async function saveSettings() {
-  const settings = {
-    provider: DOM.providerSelect.value,
-    apiKey: DOM.apiKeyInput.value.trim(),
-    model: DOM.modelSelect.value,
-    customModelInput: DOM.customModelInput.value.trim(),
-    thesisAutoSelect: DOM.thesisAutoSelect.checked,
-    systemPrompt: DOM.systemPromptEditor.value || DEFAULT_SYSTEM_PROMPT,
-  };
+  const settings = await Storage.getSettings();
+  settings.provider = DOM.providerSelect.value;
+  settings.apiKey = DOM.apiKeyInput.value.trim();
+  settings.model = DOM.modelSelect.value;
+  settings.customModelInput = DOM.customModelInput.value.trim();
+  settings.thesisAutoSelect = DOM.thesisAutoSelect.checked;
   await Storage.saveSettings(settings);
   DOM.settingsSavedToast.style.display = 'block';
   setTimeout(() => { DOM.settingsSavedToast.style.display = 'none'; }, 2000);

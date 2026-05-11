@@ -44,6 +44,15 @@
     <!-- ─── Таб «Генерация» ─── -->
     <section id="tab-generate" class="tab-panel active">
       <div class="field-group">
+        <label class="field-label" for="template-select">Шаблон промпта</label>
+        <div class="select-wrapper">
+          <select id="template-select" class="field-select">
+            <option value="">— Загрузка... —</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-group">
         <label class="field-label" for="topic-select">Тема</label>
         <div class="select-wrapper">
           <select id="topic-select" class="field-select">
@@ -208,27 +217,55 @@
     <!-- ─── Таб «Промпт» ─── -->
     <section id="tab-prompt" class="tab-panel">
       <div class="prompt-header">
-        <h3 class="section-title">Системный промпт для генерации</h3>
-        <button id="btn-reset-prompt" class="btn btn-ghost btn-sm">Сбросить по умолчанию</button>
+        <h3 class="section-title">Шаблоны промптов</h3>
+        <button id="btn-add-template" class="btn btn-primary btn-sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Новый шаблон
+        </button>
       </div>
       <p class="field-hint" style="margin-bottom:12px">
-        Этот промпт отправляется LLM вместе с тезисами выбранной темы. Используйте <code>{{topic}}</code> для подстановки названия темы и <code>{{theses}}</code> для подстановки тезисов.
+        Создайте несколько шаблонов с разными ролями и инструкциями. Активный шаблон используется при генерации ответа на VK. Переменные: <code>{{topic}}</code> — название темы, <code>{{theses}}</code> — тезисы.
       </p>
-      <div class="field-group">
-        <textarea
-          id="system-prompt-editor"
-          class="field-textarea prompt-editor"
-          rows="18"
-        ></textarea>
+
+      <!-- Список шаблонов -->
+      <div id="templates-list" class="templates-list"></div>
+      <div id="templates-empty" class="empty-state" style="display:none">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <p>Нет шаблонов. Создайте первый шаблон промпта.</p>
       </div>
-      <div class="prompt-preview-header">
-        <span class="field-label">Предпросмотр (с примером)</span>
+
+      <!-- Редактор шаблона (inline) -->
+      <div id="template-editor" class="template-editor" style="display:none">
+        <div class="template-editor-header">
+          <span class="field-label" id="template-editor-label">Редактирование шаблона</span>
+          <button id="btn-close-template-editor" class="btn btn-ghost btn-sm">Закрыть</button>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="template-name-input">Название шаблона</label>
+          <input type="text" id="template-name-input" class="field-input" placeholder="Например: Эксперт, Критик, Сарказм..."/>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="template-content-input">Содержимое промпта</label>
+          <textarea
+            id="template-content-input"
+            class="field-textarea prompt-editor"
+            rows="16"
+            placeholder="Ты — ...&#10;=== ТЕЗИСЫ ===&#10;{{theses}}&#10;=== КОНЕЦ ТЕЗИСОВ ===&#10;..."
+          ></textarea>
+        </div>
+        <div class="prompt-preview-header">
+          <span class="field-label">Предпросмотр (с примером)</span>
+        </div>
+        <div class="field-group">
+          <div id="prompt-preview" class="result-box" style="max-height:250px"></div>
+        </div>
+        <div class="template-editor-actions">
+          <button id="btn-save-template" class="btn btn-primary">Сохранить шаблон</button>
+          <button id="btn-reset-template" class="btn btn-ghost">Сбросить по умолчанию</button>
+        </div>
       </div>
-      <div class="field-group">
-        <div id="prompt-preview" class="result-box" style="max-height:300px"></div>
-      </div>
-      <button id="btn-save-prompt" class="btn btn-primary btn-block">Сохранить промпт</button>
-      <div id="prompt-saved-toast" class="toast" style="display:none">Промпт сохранён</div>
+
+      <div id="prompt-saved-toast" class="toast" style="display:none">Шаблон сохранён</div>
     </section>
 
     <!-- ─── Таб «Настройки» ─── -->
