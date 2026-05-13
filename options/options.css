@@ -462,3 +462,161 @@ body {
   margin-bottom: 14px;
 }
 .template-editor-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+/* ── Анализ текста ──────────────────── */
+.analyze-header {
+  margin-bottom: 6px;
+}
+.analyze-actions {
+  margin-bottom: 12px;
+}
+.analyze-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.analyze-results-actions {
+  display: flex;
+  gap: 6px;
+}
+.analyze-stats {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  line-height: 1.5;
+}
+.analyze-theses-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.analyze-thesis-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  transition: var(--transition);
+}
+.analyze-thesis-card.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+.analyze-thesis-card.is-editing {
+  border-color: var(--warning);
+}
+.analyze-thesis-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.analyze-cb-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.analyze-cb-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.analyze-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.analyze-thesis-card.is-selected .analyze-num {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.analyze-thesis-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.analyze-question {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-bottom: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.analyze-answer {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Группировка тем (режим Авто) ────── */
+.analyze-grouped-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 4px;
+}
+.analyze-group {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  transition: var(--transition);
+}
+.analyze-group.is-new {
+  border-color: var(--success);
+  border-left: 3px solid var(--success);
+}
+.analyze-group.is-matched {
+  border-color: var(--accent);
+  border-left: 3px solid var(--accent);
+}
+.analyze-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.analyze-group-header input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.analyze-group-select {
+  flex: 1;
+  min-width: 180px;
+  font-size: 12px;
+  padding: 6px 30px 6px 10px;
+  border-radius: var(--radius-sm);
+}
+.analyze-group .analyze-thesis-card {
+  margin-left: 26px;
+  background: var(--bg-tertiary);
+}
+.analyze-group .analyze-thesis-card.is-selected {
+  border-color: var(--accent);
+}
