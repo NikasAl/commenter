@@ -80,6 +80,11 @@ const DOM = {
   btnAnalyzeSelectAll: $('#btn-analyze-select-all'),
   btnAnalyzeDeselectAll: $('#btn-analyze-deselect-all'),
   btnAnalyzeAddSelected: $('#btn-analyze-add-selected'),
+  analyzeGrouping: $('#analyze-grouping'),
+  analyzeGroupingStats: $('#analyze-grouping-stats'),
+  analyzeGroupedList: $('#analyze-grouped-list'),
+  btnAnalyzeRegroup: $('#btn-analyze-regroup'),
+  btnAnalyzeSaveGrouped: $('#btn-analyze-save-grouped'),
   analyzeSavedToast: $('#analyze-saved-toast'),
   // Настройки
   providerSelect: $('#provider-select'),
