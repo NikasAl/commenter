@@ -178,9 +178,10 @@ async function handleGenerate() {
   if (!topic) { showError('Тема не найдена.'); return; }
 
   const settings = await Storage.getSettings();
-  if (!settings.apiKey) { showError('API ключ не настроен. Перейдите в «Настройки».'); return; }
+  const providerSettings = Storage.getProviderSettings(settings);
+  if (!providerSettings.apiKey) { showError('API ключ не настроен. Перейдите в «Настройки».'); return; }
 
-  const model = settings.customModelInput || settings.model || getDefaultModel(settings.provider);
+  const model = providerSettings.customModelInput || providerSettings.model || getDefaultModel(settings.provider);
 
   // Получить шаблон промпта
   let promptTemplate;
@@ -203,7 +204,7 @@ async function handleGenerate() {
   try {
     const response = await chrome.runtime.sendMessage({
       type: 'CHAT_REQUEST',
-      payload: { provider: settings.provider, apiKey: settings.apiKey, model, systemPrompt, userMessage },
+      payload: { provider: settings.provider, apiKey: providerSettings.apiKey, model, systemPrompt, userMessage },
     });
     if (!response.success) { showError(response.error); return; }
     DOM.resultText.textContent = response.data;
@@ -943,12 +944,13 @@ async function handleAnalyze() {
   }
 
   const settings = await Storage.getSettings();
-  if (!settings.apiKey) {
+  const providerSettings = Storage.getProviderSettings(settings);
+  if (!providerSettings.apiKey) {
     showAnalyzeError('API ключ не настроен. Перейдите в «Настройки».');
     return;
   }
 
-  const model = settings.customModelInput || settings.model || getDefaultModel(settings.provider);
+  const model = providerSettings.customModelInput || providerSettings.model || getDefaultModel(settings.provider);
   const isAuto = (topicVal === '__auto__' || topicVal === '');
 
   analyzeState.lastAnalyzedText = text;
@@ -1067,7 +1069,8 @@ function applyGroupingMapping(mapping, existingTopics) {
 
 async function handleRegroup() {
   const settings = await Storage.getSettings();
-  const model = settings.customModelInput || settings.model || getDefaultModel(settings.provider);
+  const ps = Storage.getProviderSettings(settings);
+  const model = ps.customModelInput || ps.model || getDefaultModel(settings.provider);
   await runGroupingStep(settings, model);
 }
 
@@ -1504,7 +1507,7 @@ async function sendChatRequest(settings, model, systemPrompt, userMessage) {
     type: 'CHAT_REQUEST',
     payload: {
       provider: settings.provider,
-      apiKey: settings.apiKey,
+      apiKey: Storage.getApiKey(settings),
       model,
       systemPrompt,
       userMessage,
@@ -1547,7 +1550,14 @@ function showAnalyzeToast(message) {
 // ═══════════════════════════════════════════
 
 function setupSettingsTab() {
-  DOM.providerSelect.addEventListener('change', () => updateModelOptions());
+  DOM.providerSelect.addEventListener('change', async () => {
+    await updateModelOptions();
+    const settings = await Storage.getSettings();
+    const ps = Storage.getProviderSettings(settings);
+    DOM.apiKeyInput.value = ps.apiKey || '';
+    DOM.customModelInput.value = ps.customModelInput || '';
+    if (ps.model) DOM.modelSelect.value = ps.model;
+  });
   DOM.btnSaveSettings.addEventListener('click', saveSettings);
   DOM.templateSelect?.addEventListener('change', async () => {
  // При смене шаблона в генерации — не делаем его активным глобально
@@ -1557,11 +1567,12 @@ function setupSettingsTab() {
 async function loadSettings() {
   const settings = await Storage.getSettings();
   DOM.providerSelect.value = settings.provider || 'z-ai';
-  DOM.apiKeyInput.value = settings.apiKey || '';
-  DOM.customModelInput.value = settings.customModelInput || '';
   DOM.thesisAutoSelect.checked = !!settings.thesisAutoSelect;
   await updateModelOptions();
-  if (settings.model) DOM.modelSelect.value = settings.model;
+  const ps = Storage.getProviderSettings(settings);
+  DOM.apiKeyInput.value = ps.apiKey || '';
+  DOM.customModelInput.value = ps.customModelInput || '';
+  if (ps.model) DOM.modelSelect.value = ps.model;
 }
 
 async function updateModelOptions() {
@@ -1591,10 +1602,13 @@ function fallbackModelOptions(provider) {
 async function saveSettings() {
   const settings = await Storage.getSettings();
   settings.provider = DOM.providerSelect.value;
-  settings.apiKey = DOM.apiKeyInput.value.trim();
-  settings.model = DOM.modelSelect.value;
-  settings.customModelInput = DOM.customModelInput.value.trim();
   settings.thesisAutoSelect = DOM.thesisAutoSelect.checked;
+  const provider = settings.provider || 'z-ai';
+  if (!settings.providers) settings.providers = {};
+  if (!settings.providers[provider]) settings.providers[provider] = {};
+  settings.providers[provider].apiKey = DOM.apiKeyInput.value.trim();
+  settings.providers[provider].model = DOM.modelSelect.value;
+  settings.providers[provider].customModelInput = DOM.customModelInput.value.trim();
   await Storage.saveSettings(settings);
   DOM.settingsSavedToast.style.display = 'block';
   setTimeout(() => { DOM.settingsSavedToast.style.display = 'none'; }, 2000);

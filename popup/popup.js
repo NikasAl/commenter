@@ -165,12 +165,13 @@ async function handleGenerate() {
 
   // Получить настройки
   const settings = await Storage.getSettings();
-  if (!settings.apiKey) {
+  const ps = Storage.getProviderSettings(settings);
+  if (!ps.apiKey) {
     showError('API ключ не настроен. Перейдите в "Настройки" и укажите ключ.');
     return;
   }
 
-  const model = settings.customModelInput || settings.model || getDefaultModel(settings.provider);
+  const model = ps.customModelInput || ps.model || getDefaultModel(settings.provider);
 
   // Сформировать системный промпт
   const provider = createProvider(settings.provider);
@@ -186,7 +187,7 @@ async function handleGenerate() {
       type: 'CHAT_REQUEST',
       payload: {
         provider: settings.provider,
-        apiKey: settings.apiKey,
+        apiKey: ps.apiKey,
         model,
         systemPrompt,
         userMessage,
@@ -473,8 +474,13 @@ function closeModal() {
 // ═══════════════════════════════════════════
 
 function setupSettingsTab() {
-  DOM.providerSelect.addEventListener('change', () => {
-    updateModelOptions();
+  DOM.providerSelect.addEventListener('change', async () => {
+    await updateModelOptions();
+    const settings = await Storage.getSettings();
+    const ps = Storage.getProviderSettings(settings);
+    DOM.apiKeyInput.value = ps.apiKey || '';
+    DOM.customModelInput.value = ps.customModelInput || '';
+    if (ps.model) DOM.modelSelect.value = ps.model;
   });
 
   DOM.btnSaveSettings.addEventListener('click', saveSettings);
@@ -483,12 +489,12 @@ function setupSettingsTab() {
 async function loadSettings() {
   const settings = await Storage.getSettings();
   DOM.providerSelect.value = settings.provider || 'z-ai';
-  DOM.apiKeyInput.value = settings.apiKey || '';
-  DOM.customModelInput.value = settings.customModelInput || '';
-
   await updateModelOptions();
-  if (settings.model) {
-    DOM.modelSelect.value = settings.model;
+  const ps = Storage.getProviderSettings(settings);
+  DOM.apiKeyInput.value = ps.apiKey || '';
+  DOM.customModelInput.value = ps.customModelInput || '';
+  if (ps.model) {
+    DOM.modelSelect.value = ps.model;
   }
 }
 
@@ -541,13 +547,14 @@ function fallbackModelOptions(provider) {
 }
 
 async function saveSettings() {
-  const model = DOM.modelSelect.value || DOM.customModelInput.value;
-  const settings = {
-    provider: DOM.providerSelect.value,
-    apiKey: DOM.apiKeyInput.value.trim(),
-    model: DOM.modelSelect.value,
-    customModelInput: DOM.customModelInput.value.trim(),
-  };
+  const settings = await Storage.getSettings();
+  settings.provider = DOM.providerSelect.value;
+  const provider = settings.provider || 'z-ai';
+  if (!settings.providers) settings.providers = {};
+  if (!settings.providers[provider]) settings.providers[provider] = {};
+  settings.providers[provider].apiKey = DOM.apiKeyInput.value.trim();
+  settings.providers[provider].model = DOM.modelSelect.value;
+  settings.providers[provider].customModelInput = DOM.customModelInput.value.trim();
 
   await Storage.saveSettings(settings);
 

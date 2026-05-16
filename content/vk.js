@@ -132,7 +132,7 @@
       showPromptPanel(context, topics, activeTopicId, topic, currentTopicTheses, selectedThesisIds, false);
 
       // Если автоотбор включён — запускаем LLM-селекцию
-      if (settings.thesisAutoSelect && settings.apiKey) {
+      if (settings.thesisAutoSelect && getProviderSettings(settings).apiKey) {
         await runThesisSelection(context, topic, currentTopicTheses);
       }
     } else {
@@ -177,7 +177,8 @@
     }
 
     const settings = await getSettings();
-    if (!settings.apiKey) {
+    const ps = getProviderSettings(settings);
+    if (!ps.apiKey) {
       showPanel('Ошибка', 'API ключ не настроен. Откройте настройки расширения.', 'error');
       return;
     }
@@ -190,8 +191,8 @@
         type: 'CHAT_REQUEST',
         payload: {
           provider: settings.provider || 'z-ai',
-          apiKey: settings.apiKey,
-          model: settings.customModelInput || settings.model || getDefaultModel(settings.provider),
+          apiKey: ps.apiKey,
+          model: ps.customModelInput || ps.model || getDefaultModel(settings.provider),
           systemPrompt: lastBuiltPrompt.systemPrompt,
           userMessage: lastBuiltPrompt.userMessage,
         },
@@ -931,9 +932,13 @@
   async function getSettings() {
     return new Promise(resolve => {
       chrome.storage.local.get('commenter_settings', result => {
-        resolve(result.commenter_settings || { provider: 'z-ai', apiKey: '', model: '' });
+        resolve(result.commenter_settings || { provider: 'z-ai', providers: { 'z-ai': { apiKey: '', model: '', customModelInput: '' }, 'openrouter': { apiKey: '', model: '', customModelInput: '' } } });
       });
     });
+  }
+
+  function getProviderSettings(settings) {
+    return settings.providers?.[settings.provider || 'z-ai'] || { apiKey: '', model: '', customModelInput: '' };
   }
 
   async function saveSettings(settings) {
