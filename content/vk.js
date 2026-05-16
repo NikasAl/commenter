@@ -49,6 +49,33 @@
   let currentTopicTheses = [];
   let isSelectingTheses = false;
 
+  // Дефолтные модели (дублируем из storage.js, т.к. content script не импортирует модули)
+  const DEFAULT_MODELS = {
+    'z-ai': [
+      { id: 'GLM-4.7-Flash', name: 'GLM-4.7-Flash' },
+      { id: 'GLM-4.7', name: 'GLM-4.7' },
+      { id: 'GLM-5.1-Turbo', name: 'GLM-5.1-Turbo' },
+    ],
+    'openrouter': [
+      { id: 'google/gemma-4-31b-it', name: 'Gemma 4 31B IT' },
+      { id: 'google/gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite' },
+      { id: 'microsoft/phi-4', name: 'Phi-4' },
+      { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
+      { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro' },
+      { id: 'google/gemini-2.0-flash-lite-001', name: 'Gemini 2.0 Flash Lite' },
+      { id: 'google/gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite' },
+      { id: 'google/gemini-2.0-flash-001', name: 'Gemini 2.0 Flash' },
+      { id: 'deepseek/deepseek-v4-flash:free', name: 'DeepSeek V4 Flash (free)' },
+      { id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', name: 'Nemotron Nano Omni 30B (free)' },
+      { id: 'nvidia/nemotron-3-super-120b-a12b:free', name: 'Nemotron Super 120B (free)' },
+      { id: 'nousresearch/hermes-3-llama-3.1-405b:free', name: 'Hermes 3 Llama 3.1 405B (free)' },
+    ],
+  };
+
+  // Модель и провайдер, выбранные в панели
+  let panelProvider = null;
+  let panelModel = null;
+
   // ═══════════════════════════════════════════
   //  ИНИЦИАЛИЗАЦИЯ
   // ═══════════════════════════════════════════
@@ -176,12 +203,15 @@
       return;
     }
 
-    const settings = await getSettings();
-    const ps = getProviderSettings(settings);
+    // Используем провайдер и модель из панели (если выбраны там), иначе из настроек
+    const useProvider = panelProvider || settings.provider || 'z-ai';
+    const useModel = panelModel || null;
+    const ps = settings.providers?.[useProvider] || getProviderSettings(settings);
     if (!ps.apiKey) {
-      showPanel('Ошибка', 'API ключ не настроен. Откройте настройки расширения.', 'error');
+      showPanel('Ошибка', `API ключ не настроен для провайдера ${useProvider}. Откройте настройки расширения.`, 'error');
       return;
     }
+    const model = useModel || ps.customModelInput || ps.model || getDefaultModel(useProvider);
 
     isGenerating = true;
     showPanel('Генерация...', 'Отправляю запрос в LLM...', 'loading');
@@ -190,9 +220,9 @@
       const response = await chrome.runtime.sendMessage({
         type: 'CHAT_REQUEST',
         payload: {
-          provider: settings.provider || 'z-ai',
+          provider: useProvider,
           apiKey: ps.apiKey,
-          model: ps.customModelInput || ps.model || getDefaultModel(settings.provider),
+          model: model,
           systemPrompt: lastBuiltPrompt.systemPrompt,
           userMessage: lastBuiltPrompt.userMessage,
         },
@@ -404,6 +434,37 @@
 
     const loadingHtml = isLoading ? '<span class="ts-loading"><span class="loading-spinner"></span>Анализирую тезисы...</span>' : '';
 
+    // ── Model selector ──
+    const curModelInfo = getCurrentModelAndProvider(cachedSettings);
+    panelProvider = curModelInfo.provider;
+    panelModel = curModelInfo.model;
+
+    const zaiModels = getModelsForProvider(cachedSettings, 'z-ai');
+    const orModels = getModelsForProvider(cachedSettings, 'openrouter');
+
+    const zaiOptions = zaiModels.map(m => {
+      const sel = (panelProvider === 'z-ai' && panelModel === m.id) ? ' selected' : '';
+      return `<option value="z-ai:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
+    }).join('');
+
+    const orOptions = orModels.map(m => {
+      const sel = (panelProvider === 'openrouter' && panelModel === m.id) ? ' selected' : '';
+      return `<option value="openrouter:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
+    }).join('');
+
+    // Если текущая модель не найдена в списке — добавляем её отдельно
+    let customModelOption = '';
+    const currentPs = getProviderSettings(cachedSettings);
+    if (currentPs.customModelInput) {
+      const isInList = [...zaiModels, ...orModels].some(m => m.id === currentPs.customModelInput);
+      if (!isInList) {
+        customModelOption = `<option value="${escapeHtml(panelProvider)}:${escapeHtml(currentPs.customModelInput)}" selected>${escapeHtml(currentPs.customModelInput)} (custom)</option>`;
+      }
+    }
+
+    const providerLabel = panelProvider === 'openrouter' ? 'OR' : 'z-ai';
+    const providerColor = panelProvider === 'openrouter' ? '#60a5fa' : '#4ade80';
+
     panel.innerHTML = `
       <div class="panel-header">
         <div class="panel-title">
@@ -414,6 +475,15 @@
           <button class="panel-btn panel-btn-primary btn-copy-panel">Копировать</button>
           <button class="panel-btn btn-close-panel">✕</button>
         </div>
+      </div>
+      <div class="model-bar">
+        <label for="model-selector">Модель:</label>
+        <select class="model-select" id="model-selector">
+          ${customModelOption}
+          <optgroup label="z-ai">${zaiOptions}</optgroup>
+          <optgroup label="OpenRouter">${orOptions}</optgroup>
+        </select>
+        <span class="model-provider-badge" style="color:${providerColor}">${providerLabel}</span>
       </div>
       <div class="tpl-bar">
         <label for="template-selector">Шаблон:</label>
@@ -440,6 +510,36 @@
         <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> — тезис
       </div>
     `;
+
+    // Event: model change
+    panel.querySelector('#model-selector')?.addEventListener('change', async (e) => {
+      const val = e.target.value;
+      const colonIdx = val.indexOf(':');
+      if (colonIdx === -1) return;
+      const newProvider = val.slice(0, colonIdx);
+      const newModel = val.slice(colonIdx + 1);
+
+      panelProvider = newProvider;
+      panelModel = newModel;
+
+      // Update cachedSettings and persist
+      cachedSettings.provider = newProvider;
+      if (!cachedSettings.providers[newProvider]) {
+        cachedSettings.providers[newProvider] = { apiKey: '', model: '', customModelInput: '' };
+      }
+      cachedSettings.providers[newProvider].model = newModel;
+      cachedSettings.providers[newProvider].customModelInput = '';
+      await saveSettings(cachedSettings);
+
+      // Update provider badge
+      const badge = panel.querySelector('.model-provider-badge');
+      if (badge) {
+        badge.textContent = newProvider === 'openrouter' ? 'OR' : 'z-ai';
+        badge.style.color = newProvider === 'openrouter' ? '#60a5fa' : '#4ade80';
+      }
+
+      console.log('[Commenter] Model changed:', newProvider, newModel);
+    });
 
     // Event: template change
     panel.querySelector('#template-selector')?.addEventListener('change', (e) => {
@@ -996,6 +1096,37 @@
     return provider === 'openrouter' ? 'google/gemini-2.0-flash-001' : 'GLM-4.7-Flash';
   }
 
+  function getModelsForProvider(settings, providerName) {
+    const p = providerName || 'z-ai';
+    const ps = settings.providers?.[p];
+    if (ps && ps.models && ps.models.length > 0) return ps.models;
+    return DEFAULT_MODELS[p] || [];
+  }
+
+  /**
+   * Найти провайдера по modelId — ищем во всех списках моделей.
+   * Возвращает { provider, model } или null.
+   */
+  function findProviderForModel(modelId, settings) {
+    for (const pName of ['z-ai', 'openrouter']) {
+      const models = getModelsForProvider(settings, pName);
+      if (models.some(m => m.id === modelId)) {
+        return { provider: pName, model: modelId };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Получить текущую модель и провайдера из настроек.
+   */
+  function getCurrentModelAndProvider(settings) {
+    const provider = settings.provider || 'z-ai';
+    const ps = getProviderSettings(settings);
+    const model = ps.customModelInput || ps.model || getDefaultModel(provider);
+    return { provider, model };
+  }
+
   // ═══════════════════════════════════════════
   //  ФОРМИРОВАНИЕ ТЕКСТА
   // ═══════════════════════════════════════════
@@ -1175,6 +1306,24 @@
     .ts-text strong { color: #a1a1aa; }
     .ts-item-checked .ts-text strong { color: #e4e4e7; }
     .ts-disabled .ts-item { opacity: 0.5; pointer-events: none; }
+    .model-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px; background: #22232a; border-bottom: 1px solid #3a3b42;
+    }
+    .model-bar label {
+      font-size: 11px; font-weight: 600; color: #a1a1aa; white-space: nowrap;
+    }
+    .model-select {
+      flex: 1; padding: 5px 8px; font-size: 12px; font-weight: 500;
+      color: #e4e4e7; background: #1e1f23; border: 1px solid #3a3b42;
+      border-radius: 5px; font-family: inherit; cursor: pointer;
+      outline: none; appearance: auto; max-width: 260px;
+    }
+    .model-select:focus { border-color: #6366f1; }
+    .model-provider-badge {
+      font-size: 10px; font-weight: 700; white-space: nowrap;
+      padding: 2px 6px; background: rgba(113,113,122,0.1); border-radius: 4px;
+    }
     .badge-new { background: rgba(168,85,247,0.15); color: #c084fc; }
     .thesis-form {
       padding: 12px 14px; background: #1a1b1e;
