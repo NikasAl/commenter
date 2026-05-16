@@ -267,7 +267,8 @@
   }
 
   async function runThesisSelection(context, topic, theses) {
-    if (!theses.length || !cachedSettings?.apiKey || isSelectingTheses) return;
+    const ps = getProviderSettings(cachedSettings || {});
+    if (!theses.length || !ps.apiKey || isSelectingTheses) return;
     isSelectingTheses = true;
     setThesisSelectorLoading(true);
 
@@ -276,8 +277,8 @@
         type: 'CHAT_REQUEST',
         payload: {
           provider: cachedSettings.provider || 'z-ai',
-          apiKey: cachedSettings.apiKey,
-          model: cachedSettings.customModelInput || cachedSettings.model || getDefaultModel(cachedSettings.provider),
+          apiKey: ps.apiKey,
+          model: ps.customModelInput || ps.model || getDefaultModel(cachedSettings.provider),
           systemPrompt: SELECT_SYSTEM_PROMPT,
           userMessage: buildSelectUserMessage(context.postText, theses),
         },
@@ -344,7 +345,7 @@
     updateThesisListHtml(panel);
 
     // Если автоотбор — запускаем LLM
-    if (cachedSettings.thesisAutoSelect && cachedSettings.apiKey) {
+    if (cachedSettings.thesisAutoSelect && getProviderSettings(cachedSettings).apiKey) {
       selectedThesisIds = new Set(); // сбрасываем перед LLM
       updateThesisCheckboxes();
       updatePromptFromSelection();
@@ -991,6 +992,10 @@
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
   }
 
+  function getDefaultModel(provider) {
+    return provider === 'openrouter' ? 'google/gemini-2.0-flash-001' : 'GLM-4.7-Flash';
+  }
+
   // ═══════════════════════════════════════════
   //  ФОРМИРОВАНИЕ ТЕКСТА
   // ═══════════════════════════════════════════
@@ -1471,10 +1476,6 @@
            el.matches('[data-testid="content-editable-input"]');
   }
 
-  function generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  }
-
   function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -1497,37 +1498,7 @@
   }
 
   // ── chrome.storage обёртки ───────────────
-
-  function getSettings() {
-    return new Promise(resolve => {
-      chrome.storage.local.get('commenter_settings', result => {
-        resolve(result.commenter_settings || {});
-      });
-    });
-  }
-
-  function getTopics() {
-    return new Promise(resolve => {
-      chrome.storage.local.get('commenter_topics', result => {
-        resolve(result.commenter_topics || []);
-      });
-    });
-  }
-
-  function saveTopics(topics) {
-    return new Promise(resolve => {
-      chrome.storage.local.set({ commenter_topics: topics }, resolve);
-    });
-  }
-
-  function getDefaultModel(provider) {
-    return provider === 'openrouter' ? 'google/gemini-2.0-flash-001' : 'GLM-4.7-Flash';
-  }
-
-  function saveSettings(settings) {
-    return new Promise(resolve => {
-      chrome.storage.local.set({ commenter_settings: settings }, resolve);
-    });
-  }
+  // (getSettings, getProviderSettings, saveSettings, getTopics, saveTopics,
+  //  getTemplates, setActiveTemplate, generateId, getDefaultModel — определены выше)
 
 })();
