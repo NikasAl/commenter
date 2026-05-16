@@ -68,6 +68,10 @@ async function handleChatRequest(payload) {
       error: err.message,
       errorType: err.constructor.name,
     });
+    // TimeoutError — fetch превысил таймаут
+    if (err instanceof DOMException && err.name === 'TimeoutError') {
+      throw new Error(`Превышен таймаут ожидания ответа от ${providerName} API (${url}). ${modelInfo}. Сервер не ответил за 5 минут.`);
+    }
     // Если ошибка TypeError ("Failed to fetch") — это сетевая проблема
     if (err instanceof TypeError) {
       throw new Error(`Сетевая ошибка при обращении к ${providerName} API (${url}). Проверьте подключение к интернету и доступность сервера. ${modelInfo}.\nДетали: ${err.message}`);
