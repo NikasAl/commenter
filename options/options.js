@@ -86,6 +86,13 @@ const DOM = {
   btnAnalyzeRegroup: $('#btn-analyze-regroup'),
   btnAnalyzeSaveGrouped: $('#btn-analyze-save-grouped'),
   analyzeSavedToast: $('#analyze-saved-toast'),
+  btnManageModels: $('#btn-manage-models'),
+  modelsModal: $('#models-modal'),
+  modelsModalTitle: $('#models-modal-title'),
+  modelsList: $('#models-list'),
+  btnAddModel: $('#btn-add-model'),
+  btnResetModels: $('#btn-reset-models'),
+  btnSaveModels: $('#btn-save-models'),
   // Настройки
   providerSelect: $('#provider-select'),
   apiKeyInput: $('#api-key-input'),
@@ -1551,14 +1558,21 @@ function showAnalyzeToast(message) {
 
 function setupSettingsTab() {
   DOM.providerSelect.addEventListener('change', async () => {
+    const newProvider = DOM.providerSelect.value;
     await updateModelOptions();
     const settings = await Storage.getSettings();
-    const ps = Storage.getProviderSettings(settings);
+    // Берём настройки для нового провайдера напрямую, а не через settings.provider
+    // (который ещё не сохранён и содержит старое значение)
+    const ps = settings.providers?.[newProvider] || { apiKey: '', model: '', customModelInput: '' };
     DOM.apiKeyInput.value = ps.apiKey || '';
     DOM.customModelInput.value = ps.customModelInput || '';
     if (ps.model) DOM.modelSelect.value = ps.model;
   });
   DOM.btnSaveSettings.addEventListener('click', saveSettings);
+  DOM.btnManageModels.addEventListener('click', openModelsEditor);
+  DOM.btnAddModel.addEventListener('click', addModelRow);
+  DOM.btnResetModels.addEventListener('click', resetModels);
+  DOM.btnSaveModels.addEventListener('click', saveModelsEditor);
   DOM.templateSelect?.addEventListener('change', async () => {
  // При смене шаблона в генерации — не делаем его активным глобально
   });
@@ -1577,26 +1591,15 @@ async function loadSettings() {
 
 async function updateModelOptions() {
   const provider = DOM.providerSelect.value;
-  try {
-    const response = await chrome.runtime.sendMessage({ type: 'GET_MODELS', payload: { provider } });
-    if (response.success) {
-      DOM.modelSelect.innerHTML = '<option value="">— Выберите модель —</option>';
-      response.data.forEach(model => {
-        const opt = document.createElement('option');
-        opt.value = model.id;
-        opt.textContent = model.name;
-        DOM.modelSelect.appendChild(opt);
-      });
-    }
-  } catch { fallbackModelOptions(provider); }
-}
-
-function fallbackModelOptions(provider) {
-  const models = provider === 'z-ai'
-    ? [{ id: 'glm-4-plus', name: 'GLM-4 Plus' }, { id: 'glm-4', name: 'GLM-4' }, { id: 'glm-4-flash', name: 'GLM-4 Flash' }]
-    : [{ id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini' }, { id: 'openai/gpt-4o', name: 'GPT-4o' }, { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4' }];
+  const settings = await Storage.getSettings();
+  const models = Storage.getModelsForProvider(settings, provider);
   DOM.modelSelect.innerHTML = '<option value="">— Выберите модель —</option>';
-  models.forEach(model => { const opt = document.createElement('option'); opt.value = model.id; opt.textContent = model.name; DOM.modelSelect.appendChild(opt); });
+  models.forEach(model => {
+    const opt = document.createElement('option');
+    opt.value = model.id;
+    opt.textContent = model.name;
+    DOM.modelSelect.appendChild(opt);
+  });
 }
 
 async function saveSettings() {
@@ -1614,6 +1617,87 @@ async function saveSettings() {
   setTimeout(() => { DOM.settingsSavedToast.style.display = 'none'; }, 2000);
 }
 
+// ── Редактор моделей ──────────────────────────────
+
+const modelsEditorState = { models: [], provider: '' };
+
+async function openModelsEditor() {
+  const provider = DOM.providerSelect.value;
+  modelsEditorState.provider = provider;
+  const settings = await Storage.getSettings();
+  modelsEditorState.models = Storage.getModelsForProvider(settings, provider).map(m => ({ ...m }));
+  const providerLabel = provider === 'z-ai' ? 'Z-AI' : 'OpenRouter';
+  DOM.modelsModalTitle.textContent = `Модели — ${providerLabel}`;
+  renderModelsEditorList();
+  DOM.modelsModal.style.display = 'flex';
+}
+
+function renderModelsEditorList() {
+  DOM.modelsList.innerHTML = '';
+  if (modelsEditorState.models.length === 0) {
+    DOM.modelsList.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:12px">Нет моделей. Добавьте хотя бы одну.</p>';
+    return;
+  }
+  modelsEditorState.models.forEach((m, idx) => {
+    const row = document.createElement('div');
+    row.className = 'models-list-item';
+    row.innerHTML = `
+      <input type="text" class="field-input id-input" value="${escapeHtml(m.id)}" placeholder="ID модели" data-idx="${idx}" data-field="id"/>
+      <input type="text" class="field-input name-input" value="${escapeHtml(m.name)}" placeholder="Отображаемое имя" data-idx="${idx}" data-field="name"/>
+      <button class="btn-icon danger" data-remove="${idx}" title="Удалить">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>`;
+    DOM.modelsList.appendChild(row);
+  });
+  DOM.modelsList.querySelectorAll('.field-input').forEach(input => {
+    input.addEventListener('input', () => {
+      const idx = parseInt(input.dataset.idx);
+      const field = input.dataset.field;
+      if (modelsEditorState.models[idx]) {
+        modelsEditorState.models[idx][field] = input.value;
+      }
+    });
+  });
+  DOM.modelsList.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.remove);
+      modelsEditorState.models.splice(idx, 1);
+      renderModelsEditorList();
+    });
+  });
+}
+
+function addModelRow() {
+  modelsEditorState.models.push({ id: '', name: '' });
+  renderModelsEditorList();
+  const inputs = DOM.modelsList.querySelectorAll('.id-input');
+  if (inputs.length > 0) inputs[inputs.length - 1].focus();
+}
+
+async function resetModels() {
+  const provider = modelsEditorState.provider;
+  modelsEditorState.models = (Storage.DEFAULT_MODELS[provider] || []).map(m => ({ ...m }));
+  renderModelsEditorList();
+}
+
+async function saveModelsEditor() {
+  modelsEditorState.models = modelsEditorState.models.filter(m => m.id.trim());
+  if (modelsEditorState.models.length === 0) {
+    alert('Добавьте хотя бы одну модель с ID.');
+    return;
+  }
+  const settings = await Storage.getSettings();
+  const provider = modelsEditorState.provider;
+  if (!settings.providers) settings.providers = {};
+  if (!settings.providers[provider]) settings.providers[provider] = {};
+  settings.providers[provider].models = modelsEditorState.models;
+  await Storage.saveSettings(settings);
+  DOM.modelsModal.style.display = 'none';
+  await updateModelOptions();
+  const ps = Storage.getProviderSettings(settings);
+  if (ps.model) DOM.modelSelect.value = ps.model;
+}
+
 // ═══════════════════════════════════════════
 //  УТИЛИТЫ
 // ═══════════════════════════════════════════
@@ -1623,7 +1707,8 @@ function createProvider(providerName) {
 }
 
 function getDefaultModel(provider) {
-  return provider === 'openrouter' ? 'openai/gpt-4o-mini' : 'glm-4-plus';
+  const defaults = Storage.DEFAULT_MODELS[provider || 'z-ai'];
+  return defaults?.[0]?.id || (provider === 'openrouter' ? 'google/gemini-2.0-flash-001' : 'glm-4.7-flash');
 }
 
 function showLoading(show) { DOM.loadingIndicator.style.display = show ? 'flex' : 'none'; DOM.btnGenerate.disabled = show; }
@@ -1634,6 +1719,7 @@ function closeAllModals() {
   DOM.topicEditorModal.style.display = 'none';
   DOM.importModal.style.display = 'none';
   DOM.importResultModal.style.display = 'none';
+  DOM.modelsModal.style.display = 'none';
   state.editingTopicId = null;
   state.editingTheses = [];
 }

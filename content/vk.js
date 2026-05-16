@@ -1521,7 +1521,7 @@
   }
 
   function getDefaultModel(provider) {
-    return provider === 'openrouter' ? 'openai/gpt-4o-mini' : 'glm-4-plus';
+    return provider === 'openrouter' ? 'google/gemini-2.0-flash-001' : 'glm-4.7-flash';
   }
 
   function saveSettings(settings) {

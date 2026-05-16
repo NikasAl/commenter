@@ -383,6 +383,10 @@
             <option value="">— Сначала выберите провайдера —</option>
           </select>
         </div>
+        <button id="btn-manage-models" class="btn btn-ghost btn-sm" style="margin-top:6px" title="Добавить/удалить модели в списке">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Управление моделями
+        </button>
       </div>
 
       <div class="field-group">
@@ -405,6 +409,34 @@
     </section>
 
   </main>
+
+  <!-- Модалка: Управление моделями -->
+  <div id="models-modal" class="modal" style="display:none">
+    <div class="modal-overlay"></div>
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h3 id="models-modal-title">Управление моделями</h3>
+        <button class="modal-close" data-close-modal>&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="models-editor-header">
+          <span class="field-hint">Список моделей для текущего провайдера. Можно добавлять и удалять.</span>
+          <div class="models-editor-actions">
+            <button id="btn-reset-models" class="btn btn-ghost btn-sm" title="Сбросить к списку по умолчанию">Сбросить</button>
+            <button id="btn-add-model" class="btn btn-secondary btn-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Добавить модель
+            </button>
+          </div>
+        </div>
+        <div id="models-list" class="models-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close-modal>Отмена</button>
+        <button id="btn-save-models" class="btn btn-primary">Сохранить</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Скрипты -->
   <script src="../lib/storage.js"></script>

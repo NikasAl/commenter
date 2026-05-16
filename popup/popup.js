@@ -500,43 +500,8 @@ async function loadSettings() {
 
 async function updateModelOptions() {
   const provider = DOM.providerSelect.value;
-
-  // Получить модели через background
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: 'GET_MODELS',
-      payload: { provider },
-    });
-
-    if (response.success) {
-      const models = response.data;
-      DOM.modelSelect.innerHTML = '<option value="">— Выберите модель —</option>';
-      models.forEach(model => {
-        const opt = document.createElement('option');
-        opt.value = model.id;
-        opt.textContent = model.name;
-        DOM.modelSelect.appendChild(opt);
-      });
-    }
-  } catch {
-    // Фоллбэк: использовать статический список
-    fallbackModelOptions(provider);
-  }
-}
-
-function fallbackModelOptions(provider) {
-  const models = provider === 'z-ai'
-    ? [
-        { id: 'glm-4-plus', name: 'GLM-4 Plus' },
-        { id: 'glm-4', name: 'GLM-4' },
-        { id: 'glm-4-flash', name: 'GLM-4 Flash' },
-      ]
-    : [
-        { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini' },
-        { id: 'openai/gpt-4o', name: 'GPT-4o' },
-        { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4' },
-      ];
-
+  const settings = await Storage.getSettings();
+  const models = Storage.getModelsForProvider(settings, provider);
   DOM.modelSelect.innerHTML = '<option value="">— Выберите модель —</option>';
   models.forEach(model => {
     const opt = document.createElement('option');
@@ -766,8 +731,8 @@ function createProvider(providerName) {
 }
 
 function getDefaultModel(provider) {
-  if (provider === 'openrouter') return 'openai/gpt-4o-mini';
-  return 'glm-4-plus';
+  const defaults = Storage.DEFAULT_MODELS[provider || 'z-ai'];
+  return defaults?.[0]?.id || (provider === 'openrouter' ? 'google/gemini-2.0-flash-001' : 'glm-4.7-flash');
 }
 
 function showLoading(show) {

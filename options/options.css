@@ -620,3 +620,53 @@ body {
 .analyze-group .analyze-thesis-card.is-selected {
   border-color: var(--accent);
 }
+
+/* ── Редактор моделей ───────────────────── */
+.models-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.models-editor-actions {
+  display: flex;
+  gap: 6px;
+}
+.models-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.models-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+.models-list-item:hover {
+  background: var(--bg-hover);
+}
+.models-list-item .field-input {
+  font-size: 13px;
+  padding: 6px 10px;
+}
+.models-list-item .field-input.id-input {
+  flex: 2;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 12px;
+}
+.models-list-item .field-input.name-input {
+  flex: 1;
+}
+.models-list-item .btn-icon {
+  flex-shrink: 0;
+}
