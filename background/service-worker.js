@@ -45,12 +45,33 @@ async function handleChatRequest(payload) {
     throw new Error(`Провайдер "${providerName}" не поддерживается`);
   }
 
-  const response = await provider.chat({
-    systemPrompt,
-    userMessage,
-    apiKey,
-    model,
-  });
+  if (!apiKey) {
+    throw new Error(`API ключ не указан для провайдера "${providerName}"`);
+  }
 
-  return response;
+  try {
+    const response = await provider.chat({
+      systemPrompt,
+      userMessage,
+      apiKey,
+      model,
+    });
+    return response;
+  } catch (err) {
+    // Улучшаем сообщение об ошибке: добавляем URL, провайдер, модель
+    const url = provider.baseUrl + '/chat/completions';
+ const modelInfo = model ? `модель: ${model}` : 'модель по умолчанию';
+    console.error(`[Commenter] LLM request failed:`, {
+      provider: providerName,
+      url,
+      model: modelInfo,
+      error: err.message,
+      errorType: err.constructor.name,
+    });
+    // Если ошибка TypeError ("Failed to fetch") — это сетевая проблема
+    if (err instanceof TypeError) {
+      throw new Error(`Сетевая ошибка при обращении к ${providerName} API (${url}). Проверьте подключение к интернету и доступность сервера. ${modelInfo}.\nДетали: ${err.message}`);
+    }
+    throw err;
+  }
 }
