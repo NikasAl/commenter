@@ -1521,7 +1521,7 @@
   }
 
   function getDefaultModel(provider) {
-    return provider === 'openrouter' ? 'google/gemini-2.0-flash-001' : 'glm-4.7-flash';
+    return provider === 'openrouter' ? 'google/gemini-2.0-flash-001' : 'GLM-4.7-Flash';
   }
 
   function saveSettings(settings) {

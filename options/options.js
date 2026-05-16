@@ -1708,7 +1708,7 @@ function createProvider(providerName) {
 
 function getDefaultModel(provider) {
   const defaults = Storage.DEFAULT_MODELS[provider || 'z-ai'];
-  return defaults?.[0]?.id || (provider === 'openrouter' ? 'google/gemini-2.0-flash-001' : 'glm-4.7-flash');
+  return defaults?.[0]?.id || (provider === 'openrouter' ? 'google/gemini-2.0-flash-001' : 'GLM-4.7-Flash');
 }
 
 function showLoading(show) { DOM.loadingIndicator.style.display = show ? 'flex' : 'none'; DOM.btnGenerate.disabled = show; }
