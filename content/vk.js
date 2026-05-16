@@ -148,6 +148,11 @@
     cachedTopics = topics;
     cachedSettings = { ...settings, templates, activeTemplateId: activeTpl?.id || '' };
 
+    // Инициализируем модель и провайдер из настроек
+    const curModelInfo = getCurrentModelAndProvider(cachedSettings);
+    panelProvider = curModelInfo.provider;
+    panelModel = curModelInfo.model;
+
     const activeTopicId = settings.activeTopicId || '';
     const topic = topics.find(t => t.id === activeTopicId);
     currentTopicTheses = topic ? (topic.theses || []) : [];
@@ -202,6 +207,8 @@
       showPanel('Ошибка', 'Сначала соберите промпт: Ctrl+Shift+P', 'error');
       return;
     }
+
+    const settings = await getSettings();
 
     // Используем провайдер и модель из панели (если выбраны там), иначе из настроек
     const useProvider = panelProvider || settings.provider || 'z-ai';
@@ -1476,6 +1483,37 @@
       `;
     }
 
+    // ── Model bar (для type === 'prompt') ──
+    let modelBarHtml = '';
+    if (type === 'prompt' && cachedSettings) {
+      const zaiModels = getModelsForProvider(cachedSettings, 'z-ai');
+      const orModels = getModelsForProvider(cachedSettings, 'openrouter');
+
+      const zaiOptions = zaiModels.map(m => {
+        const sel = (panelProvider === 'z-ai' && panelModel === m.id) ? ' selected' : '';
+        return `<option value="z-ai:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
+      }).join('');
+
+      const orOptions = orModels.map(m => {
+        const sel = (panelProvider === 'openrouter' && panelModel === m.id) ? ' selected' : '';
+        return `<option value="openrouter:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
+      }).join('');
+
+      const providerLabel = panelProvider === 'openrouter' ? 'OR' : 'z-ai';
+      const providerColor = panelProvider === 'openrouter' ? '#60a5fa' : '#4ade80';
+
+      modelBarHtml = `
+        <div class="model-bar">
+          <label for="model-selector">Модель:</label>
+          <select class="model-select" id="model-selector">
+            <optgroup label="z-ai">${zaiOptions}</optgroup>
+            <optgroup label="OpenRouter">${orOptions}</optgroup>
+          </select>
+          <span class="model-provider-badge" style="color:${providerColor}">${providerLabel}</span>
+        </div>
+      `;
+    }
+
     let debugHtml = '';
     if (context) {
       const previewText = context.postText
@@ -1515,6 +1553,7 @@
           <button class="panel-btn btn-close-panel">✕</button>
         </div>
       </div>
+      ${modelBarHtml}
       ${tplBarHtml}
       ${topicBarHtml}
       <div class="panel-body">${debugHtml}<pre>${escapeHtml(content)}</pre></div>
@@ -1523,6 +1562,39 @@
         <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> — генерация
       </div>
     `;
+
+    // Событие смены модели
+    const modelSelect = panel.querySelector('#model-selector');
+    if (modelSelect) {
+      modelSelect.addEventListener('change', async (e) => {
+        const val = e.target.value;
+        const colonIdx = val.indexOf(':');
+        if (colonIdx === -1) return;
+        const newProvider = val.slice(0, colonIdx);
+        const newModel = val.slice(colonIdx + 1);
+
+        panelProvider = newProvider;
+        panelModel = newModel;
+
+        if (cachedSettings) {
+          cachedSettings.provider = newProvider;
+          if (!cachedSettings.providers[newProvider]) {
+            cachedSettings.providers[newProvider] = { apiKey: '', model: '', customModelInput: '' };
+          }
+          cachedSettings.providers[newProvider].model = newModel;
+          cachedSettings.providers[newProvider].customModelInput = '';
+          await saveSettings(cachedSettings);
+        }
+
+        const badge = panel.querySelector('.model-provider-badge');
+        if (badge) {
+          badge.textContent = newProvider === 'openrouter' ? 'OR' : 'z-ai';
+          badge.style.color = newProvider === 'openrouter' ? '#60a5fa' : '#4ade80';
+        }
+
+        console.log('[Commenter] Model changed:', newProvider, newModel);
+      });
+    }
 
     // Событие смены шаблона
     const tplSelect = panel.querySelector('.tpl-select');
