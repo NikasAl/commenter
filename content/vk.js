@@ -76,6 +76,9 @@
   let panelProvider = null;
   let panelModel = null;
 
+  // Пользователь редактировал контекст вручную
+  let isUserMessageEdited = false;
+
   // ═══════════════════════════════════════════
   //  ИНИЦИАЛИЗАЦИЯ
   // ═══════════════════════════════════════════
@@ -147,6 +150,9 @@
     cachedContext = context;
     cachedTopics = topics;
     cachedSettings = { ...settings, templates, activeTemplateId: activeTpl?.id || '' };
+
+    // Сбросить ручное редактирование контекста при новой сборке промпта
+    isUserMessageEdited = false;
 
     // Инициализируем модель и провайдер из настроек
     const curModelInfo = getCurrentModelAndProvider(cachedSettings);
@@ -510,7 +516,19 @@
       </div>
       ${loadingHtml}
       <div class="ts-list">${thesisItemsHtml}</div>
-      <div class="panel-body"><pre>${escapeHtml('Загрузка...')}</pre></div>
+      <div class="panel-body">
+        <details class="sp-details">
+          <summary class="sp-summary">Системный промпт</summary>
+          <pre id="sp-display" class="sp-pre">${escapeHtml('Загрузка...')}</pre>
+        </details>
+        <div class="um-section">
+          <div class="um-header">
+            <label class="um-label">Контекст (можно редактировать):</label>
+            <button class="panel-btn btn-um-reset" id="btn-um-reset" style="display:none" title="Сбросить к оригиналу">&#x21BA; Сброс</button>
+          </div>
+          <textarea id="um-editor" class="form-textarea um-editor" rows="8" placeholder="Контекст поста появится здесь...">${escapeHtml(lastBuiltPrompt?.userMessage || '')}</textarea>
+        </div>
+      </div>
       <div class="panel-hint">
         <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> — сбор &nbsp;
         <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> — генерация &nbsp;
@@ -599,6 +617,29 @@
 
     panel.querySelector('.btn-close-panel')?.addEventListener('click', hidePanel);
 
+    // Event: user message edit
+    const umEditor = panel.querySelector('#um-editor');
+    if (umEditor) {
+      umEditor.addEventListener('input', () => {
+        isUserMessageEdited = true;
+        if (lastBuiltPrompt) {
+          lastBuiltPrompt.userMessage = umEditor.value;
+        }
+        const resetBtn = panel.querySelector('#btn-um-reset');
+        if (resetBtn) resetBtn.style.display = '';
+      });
+      panel.querySelector('#btn-um-reset')?.addEventListener('click', () => {
+        isUserMessageEdited = false;
+        if (cachedContext && lastBuiltPrompt) {
+          const userMessage = formatUserMessage(cachedContext);
+          lastBuiltPrompt.userMessage = userMessage;
+          umEditor.value = userMessage;
+        }
+        const resetBtn = panel.querySelector('#btn-um-reset');
+        if (resetBtn) resetBtn.style.display = 'none';
+      });
+    }
+
     // Build initial prompt text
     updatePromptFromSelection();
   }
@@ -671,12 +712,16 @@
     const systemPrompt = buildSystemPrompt(promptTemplate, topicName, thesesText);
     const userMessage = formatUserMessage(cachedContext);
     lastBuiltPrompt = { systemPrompt, userMessage, context: cachedContext };
-    // Update pre element
+    // Update UI elements
     const panel = getPanel();
-    const pre = panel?.querySelector('.panel-body pre');
-    if (pre) {
-      const fp = `[Системный промпт]\n${systemPrompt}\n\n[Контекст поста + сообщение для ответа]\n${userMessage}`;
-      pre.textContent = fp;
+    const spPre = panel?.querySelector('#sp-display');
+    if (spPre) {
+      spPre.textContent = systemPrompt;
+    }
+    // Update user message editor only if user hasn't manually edited it
+    const umEditor = panel?.querySelector('#um-editor');
+    if (umEditor && !isUserMessageEdited) {
+      umEditor.value = userMessage;
     }
   }
 
@@ -1383,6 +1428,42 @@
       padding: 6px 8px; color: #f87171; background: rgba(239,68,68,0.08);
       border-radius: 5px;
     }
+    .sp-details {
+      margin-bottom: 8px;
+    }
+    .sp-summary {
+      font-size: 11px; font-weight: 600; color: #a1a1aa;
+      padding: 4px 0; cursor: pointer; user-select: none;
+      outline: none;
+    }
+    .sp-summary:hover { color: #d4d4d8; }
+    .sp-pre {
+      white-space: pre-wrap; word-break: break-word;
+      font-family: 'Cascadia Code','Fira Code','JetBrains Mono',monospace;
+      font-size: 11px; line-height: 1.5; color: #a1a1aa;
+      padding: 8px; margin-top: 4px; background: #25262b;
+      border-radius: 5px; max-height: 200px; overflow-y: auto;
+    }
+    .um-section {
+      margin-top: 4px;
+    }
+    .um-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .um-label {
+      font-size: 11px; font-weight: 600; color: #22c55e;
+    }
+    .um-editor {
+      width: 100%; padding: 8px 10px; font-size: 12px; line-height: 1.5;
+      color: #e4e4e7; background: #25262b; border: 1px solid #3a3b42;
+      border-radius: 5px; font-family: 'Cascadia Code','Fira Code','JetBrains Mono',monospace;
+      resize: vertical; outline: none; min-height: 80px;
+    }
+    .um-editor:focus { border-color: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,0.15); }
+    .um-editor::placeholder { color: #52525b; }
+    .btn-um-reset { font-size: 10px !important; padding: 2px 6px !important; }
+    .btn-um-reset:hover { color: #f59e0b !important; border-color: rgba(245,158,11,0.3) !important; }
   `;
 
   /**
@@ -1556,7 +1637,7 @@
       ${modelBarHtml}
       ${tplBarHtml}
       ${topicBarHtml}
-      <div class="panel-body">${debugHtml}<pre>${escapeHtml(content)}</pre></div>
+      <div class="panel-body">${debugHtml}${type === 'prompt' ? `<details class="sp-details"><summary class="sp-summary">Системный промпт</summary><pre id="sp-display" class="sp-pre">${escapeHtml(lastBuiltPrompt?.systemPrompt || '')}</pre></details><div class="um-section"><div class="um-header"><label class="um-label">Контекст (можно редактировать):</label><button class="panel-btn btn-um-reset" id="btn-um-reset" style="display:none" title="Сбросить к оригиналу">&#x21BA; Сброс</button></div><textarea id="um-editor" class="form-textarea um-editor" rows="8" placeholder="Контекст поста появится здесь...">${escapeHtml(lastBuiltPrompt?.userMessage || '')}</textarea></div>` : `<pre>${escapeHtml(content)}</pre>`}</div>
       <div class="panel-hint">
         <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> — собрать промпт &nbsp;
         <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> — генерация
@@ -1619,7 +1700,10 @@
 
     // События кнопок
     panel.querySelector('.btn-copy-panel')?.addEventListener('click', () => {
-      navigator.clipboard.writeText(content).catch(() => {});
+      const copyText = lastBuiltPrompt
+        ? `[Системный промпт]\n${lastBuiltPrompt.systemPrompt}\n\n[Контекст поста]\n${lastBuiltPrompt.userMessage}`
+        : content;
+      navigator.clipboard.writeText(copyText).catch(() => {});
       const btn = panel.querySelector('.btn-copy-panel');
       btn.textContent = 'Скопировано!';
       btn.classList.add('btn-copied');
@@ -1627,6 +1711,31 @@
     });
 
     panel.querySelector('.btn-close-panel')?.addEventListener('click', hidePanel);
+
+    // Event: user message edit (for prompt type)
+    if (type === 'prompt') {
+      const umEditor = panel.querySelector('#um-editor');
+      if (umEditor) {
+        umEditor.addEventListener('input', () => {
+          isUserMessageEdited = true;
+          if (lastBuiltPrompt) {
+            lastBuiltPrompt.userMessage = umEditor.value;
+          }
+          const resetBtn = panel.querySelector('#btn-um-reset');
+          if (resetBtn) resetBtn.style.display = '';
+        });
+        panel.querySelector('#btn-um-reset')?.addEventListener('click', () => {
+          isUserMessageEdited = false;
+          if (cachedContext && lastBuiltPrompt) {
+            const userMessage = formatUserMessage(cachedContext);
+            lastBuiltPrompt.userMessage = userMessage;
+            umEditor.value = userMessage;
+          }
+          const resetBtn = panel.querySelector('#btn-um-reset');
+          if (resetBtn) resetBtn.style.display = 'none';
+        });
+      }
+    }
   }
 
   function updatePanelStatus(text) {
