@@ -113,6 +113,7 @@ async function init() {
   setupTemplatesTab();
   setupAnalyzeTab();
   setupSettingsTab();
+  setupViewerButton();
   await refreshTopics();
   await refreshTemplateSelect();
   await refreshTemplates();
@@ -1736,4 +1737,17 @@ function showImportToast(message) {
   toast.textContent = message;
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 2500);
+}
+
+// ═══════════════════════════════════════════
+//  КНОПКА «КАРТОЧКИ»
+// ═══════════════════════════════════════════
+
+function setupViewerButton() {
+  const btn = document.getElementById('btn-open-viewer');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const url = chrome.runtime.getURL('viewer/viewer.html');
+    window.open(url, '_blank');
+  });
 }

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Commenter — Карточки</title>
+  <link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+
+  <!-- ════════════ Верхняя панель ════════════ -->
+  <header class="viewer-header">
+    <div class="header-left">
+      <a href="options.html" class="back-link" title="Назад к управлению">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      </a>
+      <span class="header-title">Карточки</span>
+    </div>
+    <div class="header-center">
+      <div class="topic-selector">
+        <select id="topic-filter" class="select-control">
+          <option value="__all__">Все темы</option>
+        </select>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="card-counter" id="card-counter">0 / 0</span>
+    </div>
+  </header>
+
+  <!-- ════════════ Полноэкранная область карточек ════════════ -->
+  <main class="viewer-main" id="viewer-main">
+
+    <!-- Пустое состояние -->
+    <div class="empty-state" id="empty-state">
+      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+        <rect x="2" y="3" width="20" height="18" rx="2" ry="2"/>
+        <line x1="2" y1="9" x2="22" y2="9"/>
+        <line x1="9" y1="3" x2="9" y2="21"/>
+      </svg>
+      <p class="empty-title">Нет тезисов для повторения</p>
+      <p class="empty-hint">Добавьте темы и тезисы в разделе управления или импортируйте их.</p>
+      <a href="options.html" class="btn btn-secondary">Перейти к управлению</a>
+    </div>
+
+    <!-- Карточка -->
+    <div class="card-wrapper" id="card-wrapper" style="display:none">
+      <div class="card-topic-badge" id="card-topic-badge"></div>
+      <div class="card-number" id="card-number">1</div>
+
+      <div class="flashcard" id="flashcard" tabindex="0">
+        <!-- Лицевая сторона: Вопрос -->
+        <div class="card-face card-front" id="card-front">
+          <div class="card-label">Вопрос</div>
+          <div class="card-text" id="card-question"></div>
+          <div class="card-hint">Нажмите или пробел, чтобы перевернуть</div>
+        </div>
+        <!-- Обратная сторона: Ответ -->
+        <div class="card-face card-back" id="card-back">
+          <div class="card-label card-label-answer">Ответ</div>
+          <div class="card-text" id="card-answer"></div>
+        </div>
+      </div>
+
+      <!-- Управление -->
+      <div class="card-actions-top">
+        <button class="btn-icon" id="btn-edit" title="Редактировать">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="btn-icon danger" id="btn-delete" title="Удалить">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Навигация -->
+    <nav class="card-nav" id="card-nav" style="display:none">
+      <button class="nav-btn" id="btn-prev" title="Предыдущая (←)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div class="nav-dots" id="nav-dots"></div>
+      <button class="nav-btn" id="btn-next" title="Следующая (→)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </nav>
+
+    <!-- Прогресс-бар -->
+    <div class="progress-bar" id="progress-bar" style="display:none">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+  </main>
+
+  <!-- ════════════ Модалка редактирования ════════════ -->
+  <div id="edit-modal" class="modal" style="display:none">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Редактировать тезис</h3>
+        <button class="modal-close" id="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field-group">
+          <label class="field-label">Вопрос</label>
+          <textarea id="edit-question" class="field-textarea" rows="4" placeholder="Текст вопроса..."></textarea>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Ответ</label>
+          <textarea id="edit-answer" class="field-textarea" rows="6" placeholder="Текст ответа..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btn-edit-cancel">Отмена</button>
+        <button class="btn btn-primary" id="btn-edit-save">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════ Модалка подтверждения удаления ════════════ -->
+  <div id="delete-modal" class="modal" style="display:none">
+    <div class="modal-overlay"></div>
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3>Удалить тезис?</h3>
+        <button class="modal-close" id="delete-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="delete-confirm-text" id="delete-confirm-text"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btn-delete-cancel">Отмена</button>
+        <button class="btn btn-danger" id="btn-delete-confirm">Удалить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Тост -->
+  <div id="toast" class="toast" style="display:none"></div>
+
+  <!-- Скрипты -->
+  <script src="../lib/storage.js"></script>
+  <script src="viewer.js"></script>
+</body>
+</html>
