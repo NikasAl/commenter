@@ -301,13 +301,21 @@ body {
 }
 .card-hint {
   position: absolute;
-  bottom: 20px;
+  bottom: 36px;
   font-size: 12px;
   color: var(--text-muted);
   opacity: 0.6;
 }
 .flashcard:hover .card-hint {
   opacity: 1;
+}
+.card-last-reviewed {
+  position: absolute;
+  bottom: 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  font-style: italic;
 }
 
 /* ── Действия над карточкой ─────────────────── */

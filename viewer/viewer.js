@@ -17,10 +17,11 @@
   // ═══════════════════════════════════════════
 
   let allTopics = [];
-  let allCards = [];          // [{ topicId, topicName, thesisId, question, answer }]
+  let allCards = [];          // [{ topicId, topicName, thesisId, question, answer, lastReviewed }]
   let filteredCards = [];     // после фильтра по теме
   let currentIndex = 0;
   let currentTopicFilter = '__all__';
+  let reviewLog = {};         // { thesisId: timestamp } — последние повторения
 
   // DOM
   const $topicFilter   = document.getElementById('topic-filter');
@@ -48,9 +49,36 @@
 
   async function loadData() {
     allTopics = await Storage.getTopics();
+    // Загрузить лог повторений
+    const result = await chrome.storage.local.get('commenter_review_log');
+    reviewLog = result['commenter_review_log'] || {};
     buildTopicSelector();
     buildCardList();
     renderCurrentCard();
+  }
+
+  async function saveReviewLog() {
+    await chrome.storage.local.set({ 'commenter_review_log': reviewLog });
+  }
+
+  async function markReviewed(thesisId) {
+    reviewLog[thesisId] = Date.now();
+    await saveReviewLog();
+  }
+
+  function formatLastReviewed(ts) {
+    if (!ts) return '';
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'только что';
+    if (mins < 60) return `${mins} мин. назад`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} ч. назад`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days} дн. назад`;
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5) return `${weeks} нед. назад`;
+    return new Date(ts).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
   }
 
   function buildTopicSelector() {
@@ -86,6 +114,7 @@
           thesisId: thesis.id,
           question: thesis.question || '(без вопроса)',
           answer: thesis.answer || '(без ответа)',
+          lastReviewed: reviewLog[thesis.id] || 0,
         });
       }
     }
@@ -98,6 +127,8 @@
     } else {
       filteredCards = allCards.filter(c => c.topicId === currentTopicFilter);
     }
+    // Сортировка: раньше повторённые — первыми (0 = никогда не повторялось = в начале)
+    filteredCards.sort((a, b) => a.lastReviewed - b.lastReviewed);
     // Корректируем индекс
     if (filteredCards.length === 0) {
       currentIndex = 0;
@@ -128,6 +159,12 @@
     // Сбросить флип
     $flashcard.classList.remove('is-flipped');
 
+    // Отметить как просмотренную
+    if (!card.lastReviewed || (Date.now() - card.lastReviewed) > 5000) {
+      markReviewed(card.thesisId);
+      card.lastReviewed = Date.now();
+    }
+
     // Тема
     $topicBadge.textContent = card.topicName;
 
@@ -140,6 +177,14 @@
     // Текст
     $question.textContent = card.question;
     $answer.textContent = card.answer;
+
+    // Индикатор последнего повторения
+    const $lastHint = document.getElementById('last-reviewed-hint');
+    if ($lastHint) {
+      const lrText = formatLastReviewed(card.lastReviewed);
+      $lastHint.textContent = lrText;
+      $lastHint.style.display = lrText ? 'block' : 'none';
+    }
 
     // Кнопки навигации
     $prev.disabled = currentIndex === 0;

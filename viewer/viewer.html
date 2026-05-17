@@ -11,7 +11,7 @@
   <!-- ════════════ Верхняя панель ════════════ -->
   <header class="viewer-header">
     <div class="header-left">
-      <a href="options.html" class="back-link" title="Назад к управлению">
+      <a href="../options/options.html" class="back-link" title="Назад к управлению">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
       </a>
       <span class="header-title">Карточки</span>
@@ -40,7 +40,7 @@
       </svg>
       <p class="empty-title">Нет тезисов для повторения</p>
       <p class="empty-hint">Добавьте темы и тезисы в разделе управления или импортируйте их.</p>
-      <a href="options.html" class="btn btn-secondary">Перейти к управлению</a>
+      <a href="../options/options.html" class="btn btn-secondary">Перейти к управлению</a>
     </div>
 
     <!-- Карточка -->
@@ -49,16 +49,19 @@
       <div class="card-number" id="card-number">1</div>
 
       <div class="flashcard" id="flashcard" tabindex="0">
-        <!-- Лицевая сторона: Вопрос -->
-        <div class="card-face card-front" id="card-front">
-          <div class="card-label">Вопрос</div>
-          <div class="card-text" id="card-question"></div>
-          <div class="card-hint">Нажмите или пробел, чтобы перевернуть</div>
-        </div>
-        <!-- Обратная сторона: Ответ -->
-        <div class="card-face card-back" id="card-back">
-          <div class="card-label card-label-answer">Ответ</div>
-          <div class="card-text" id="card-answer"></div>
+        <div class="card-inner">
+          <!-- Лицевая сторона: Вопрос -->
+          <div class="card-face card-front" id="card-front">
+            <div class="card-label">Вопрос</div>
+            <div class="card-text" id="card-question"></div>
+            <div class="card-hint">Нажмите или пробел, чтобы перевернуть</div>
+            <div class="card-last-reviewed" id="last-reviewed-hint" style="display:none"></div>
+          </div>
+          <!-- Обратная сторона: Ответ -->
+          <div class="card-face card-back" id="card-back">
+            <div class="card-label card-label-answer">Ответ</div>
+            <div class="card-text" id="card-answer"></div>
+          </div>
         </div>
       </div>
 
