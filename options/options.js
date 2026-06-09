@@ -5,6 +5,7 @@
 
 import { ZAiProvider } from '../lib/providers/z-ai.js';
 import { OpenRouterProvider } from '../lib/providers/openrouter.js';
+import { LocalProvider } from '../lib/providers/local.js';
 
 const Storage = window.Storage;
 
@@ -187,7 +188,7 @@ async function handleGenerate() {
 
   const settings = await Storage.getSettings();
   const providerSettings = Storage.getProviderSettings(settings);
-  if (!providerSettings.apiKey) { showError('API ключ не настроен. Перейдите в «Настройки».'); return; }
+  if (!providerSettings.apiKey && settings.provider !== 'local') { showError('API ключ не настроен. Перейдите в «Настройки».'); return; }
 
   const model = providerSettings.customModelInput || providerSettings.model || getDefaultModel(settings.provider);
 
@@ -212,7 +213,14 @@ async function handleGenerate() {
   try {
     const response = await chrome.runtime.sendMessage({
       type: 'CHAT_REQUEST',
-      payload: { provider: settings.provider, apiKey: providerSettings.apiKey, model, systemPrompt, userMessage },
+      payload: {
+        provider: settings.provider,
+        apiKey: providerSettings.apiKey,
+        model,
+        systemPrompt,
+        userMessage,
+        baseUrl: providerSettings.baseUrl,
+      },
     });
     if (!response.success) { showError(response.error); return; }
     DOM.resultText.textContent = response.data;
@@ -1562,12 +1570,23 @@ function setupSettingsTab() {
     const newProvider = DOM.providerSelect.value;
     await updateModelOptions();
     const settings = await Storage.getSettings();
-    // Берём настройки для нового провайдера напрямую, а не через settings.provider
-    // (который ещё не сохранён и содержит старое значение)
+    // Берём настройки для нового провайдера напрямую
     const ps = settings.providers?.[newProvider] || { apiKey: '', model: '', customModelInput: '' };
     DOM.apiKeyInput.value = ps.apiKey || '';
     DOM.customModelInput.value = ps.customModelInput || '';
     if (ps.model) DOM.modelSelect.value = ps.model;
+    // Показать/скрыть настройки локального сервера
+    const localSettings = document.getElementById('local-settings');
+    const apiKeyGroup = DOM.apiKeyInput?.closest('.field-group');
+    if (newProvider === 'local') {
+      if (localSettings) localSettings.style.display = '';
+      const baseUrlInput = document.getElementById('local-base-url');
+      if (baseUrlInput) baseUrlInput.value = ps.baseUrl || 'http://turbo:8080';
+      if (apiKeyGroup) apiKeyGroup.style.display = 'none'; // API ключ не обязателен
+    } else {
+      if (localSettings) localSettings.style.display = 'none';
+      if (apiKeyGroup) apiKeyGroup.style.display = '';
+    }
   });
   DOM.btnSaveSettings.addEventListener('click', saveSettings);
   DOM.btnManageModels.addEventListener('click', openModelsEditor);
@@ -1590,6 +1609,19 @@ async function loadSettings() {
   DOM.apiKeyInput.value = ps.apiKey || '';
   DOM.customModelInput.value = ps.customModelInput || '';
   if (ps.model) DOM.modelSelect.value = ps.model;
+  // Показать/скрыть настройки локального сервера
+  const isLocal = (settings.provider || 'z-ai') === 'local';
+  const localSettings = document.getElementById('local-settings');
+  const apiKeyGroup = DOM.apiKeyInput?.closest('.field-group');
+  if (isLocal) {
+    if (localSettings) localSettings.style.display = '';
+    const baseUrlInput = document.getElementById('local-base-url');
+    if (baseUrlInput) baseUrlInput.value = ps.baseUrl || 'http://turbo:8080';
+    if (apiKeyGroup) apiKeyGroup.style.display = 'none';
+  } else {
+    if (localSettings) localSettings.style.display = 'none';
+    if (apiKeyGroup) apiKeyGroup.style.display = '';
+  }
 }
 
 async function updateModelOptions() {
@@ -1617,6 +1649,11 @@ async function saveSettings() {
   settings.providers[provider].apiKey = DOM.apiKeyInput.value.trim();
   settings.providers[provider].model = DOM.modelSelect.value;
   settings.providers[provider].customModelInput = DOM.customModelInput.value.trim();
+  // Сохраняем baseUrl для локального провайдера
+  if (provider === 'local') {
+    const baseUrlInput = document.getElementById('local-base-url');
+    settings.providers[provider].baseUrl = baseUrlInput ? baseUrlInput.value.trim().replace(/\/+$/, '') : 'http://turbo:8080';
+  }
   await Storage.saveSettings(settings);
   DOM.settingsSavedToast.style.display = 'block';
   setTimeout(() => { DOM.settingsSavedToast.style.display = 'none'; }, 2000);
@@ -1631,7 +1668,7 @@ async function openModelsEditor() {
   modelsEditorState.provider = provider;
   const settings = await Storage.getSettings();
   modelsEditorState.models = Storage.getModelsForProvider(settings, provider).map(m => ({ ...m }));
-  const providerLabel = provider === 'z-ai' ? 'Z-AI' : 'OpenRouter';
+  const providerLabel = provider === 'z-ai' ? 'Z-AI' : provider === 'local' ? 'Локальный сервер' : 'OpenRouter';
   DOM.modelsModalTitle.textContent = `Модели — ${providerLabel}`;
   renderModelsEditorList();
   DOM.modelsModal.style.display = 'flex';
@@ -1708,11 +1745,13 @@ async function saveModelsEditor() {
 // ═══════════════════════════════════════════
 
 function createProvider(providerName) {
+  if (providerName === 'local') return new LocalProvider();
   return providerName === 'openrouter' ? new OpenRouterProvider() : new ZAiProvider();
 }
 
 function getDefaultModel(provider) {
   const defaults = Storage.DEFAULT_MODELS[provider || 'z-ai'];
+  if (provider === 'local') return defaults?.[0]?.id || 'gemma-4-26b';
   return defaults?.[0]?.id || (provider === 'openrouter' ? 'google/gemini-2.0-flash-001' : 'GLM-4.7-Flash');
 }
 

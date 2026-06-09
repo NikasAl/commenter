@@ -6,11 +6,13 @@
 // Импорт провайдеров (ES Modules)
 import { ZAiProvider } from '../lib/providers/z-ai.js';
 import { OpenRouterProvider } from '../lib/providers/openrouter.js';
+import { LocalProvider } from '../lib/providers/local.js';
 
 // Инициализация провайдеров
 const providers = {
   'z-ai': new ZAiProvider(),
   'openrouter': new OpenRouterProvider(),
+  'local': new LocalProvider(),
 };
 
 // Слушатель сообщений от popup
@@ -38,14 +40,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
  * Обработка чат-запроса к LLM
  */
 async function handleChatRequest(payload) {
-  const { provider: providerName, apiKey, model, systemPrompt, userMessage } = payload;
+  const { provider: providerName, apiKey, model, systemPrompt, userMessage, baseUrl } = payload;
   const provider = providers[providerName];
 
   if (!provider) {
     throw new Error(`Провайдер "${providerName}" не поддерживается`);
   }
 
-  if (!apiKey) {
+  // Для локального провайдера устанавливаем baseUrl из настроек
+  if (providerName === 'local' && baseUrl) {
+    provider.setBaseUrl(baseUrl);
+  }
+
+  // Локальный провайдер может работать без API ключа
+  if (providerName !== 'local' && !apiKey) {
     throw new Error(`API ключ не указан для провайдера "${providerName}"`);
   }
 

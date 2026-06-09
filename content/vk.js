@@ -56,6 +56,9 @@
       { id: 'GLM-4.7', name: 'GLM-4.7' },
       { id: 'GLM-5.1-Turbo', name: 'GLM-5.1-Turbo' },
     ],
+    'local': [
+      { id: 'gemma-4-26b', name: 'Gemma 4 26B' },
+    ],
     'openrouter': [
       { id: 'google/gemma-4-31b-it', name: 'Gemma 4 31B IT' },
       { id: 'google/gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite' },
@@ -173,7 +176,9 @@
       showPromptPanel(context, topics, activeTopicId, topic, currentTopicTheses, selectedThesisIds, false);
 
       // Если автоотбор включён — запускаем LLM-селекцию
-      if (settings.thesisAutoSelect && getProviderSettings(settings).apiKey) {
+      const provSettings = getProviderSettings(settings);
+      const prov = settings.provider || 'z-ai';
+      if (settings.thesisAutoSelect && (prov === 'local' || provSettings.apiKey)) {
         const mode = settings.thesisSelectionMode || 'full';
         if (mode === 'keywords') {
           await runKeywordSelection(context, topic, currentTopicTheses);
@@ -228,7 +233,7 @@
     const useProvider = panelProvider || settings.provider || 'z-ai';
     const useModel = panelModel || null;
     const ps = settings.providers?.[useProvider] || getProviderSettings(settings);
-    if (!ps.apiKey) {
+    if (!ps.apiKey && useProvider !== 'local') {
       showPanel('Ошибка', `API ключ не настроен для провайдера ${useProvider}. Откройте настройки расширения.`, 'error');
       return;
     }
@@ -246,6 +251,7 @@
           model: model,
           systemPrompt: lastBuiltPrompt.systemPrompt,
           userMessage: lastBuiltPrompt.userMessage,
+          baseUrl: ps.baseUrl,
         },
       });
 
@@ -319,7 +325,8 @@
 
   async function runThesisSelection(context, topic, theses) {
     const ps = getProviderSettings(cachedSettings || {});
-    if (!theses.length || !ps.apiKey || isSelectingTheses) return;
+    const prov = cachedSettings.provider || 'z-ai';
+    if (!theses.length || (prov !== 'local' && !ps.apiKey) || isSelectingTheses) return;
     isSelectingTheses = true;
     setThesisSelectorLoading(true);
 
@@ -327,11 +334,12 @@
       const response = await chrome.runtime.sendMessage({
         type: 'CHAT_REQUEST',
         payload: {
-          provider: cachedSettings.provider || 'z-ai',
+          provider: prov,
           apiKey: ps.apiKey,
           model: ps.customModelInput || ps.model || getDefaultModel(cachedSettings.provider),
           systemPrompt: SELECT_SYSTEM_PROMPT,
           userMessage: buildSelectUserMessage(context.postText, theses),
+          baseUrl: ps.baseUrl,
         },
       });
 
@@ -407,7 +415,8 @@
 
   async function runKeywordSelection(context, topic, theses) {
     const ps = getProviderSettings(cachedSettings || {});
-    if (!theses.length || !ps.apiKey || isSelectingTheses) return;
+    const prov = cachedSettings.provider || 'z-ai';
+    if (!theses.length || (prov !== 'local' && !ps.apiKey) || isSelectingTheses) return;
     isSelectingTheses = true;
     setThesisSelectorLoading(true, 'Извлекаю ключевые слова из поста...');
 
@@ -415,11 +424,12 @@
       const response = await chrome.runtime.sendMessage({
         type: 'CHAT_REQUEST',
         payload: {
-          provider: cachedSettings.provider || 'z-ai',
+          provider: prov,
           apiKey: ps.apiKey,
           model: ps.customModelInput || ps.model || getDefaultModel(cachedSettings.provider),
           systemPrompt: KEYWORDS_SYSTEM_PROMPT,
           userMessage: context.postText || '(без текста)',
+          baseUrl: ps.baseUrl,
         },
       });
 
@@ -497,7 +507,9 @@
     updateThesisListHtml(panel);
 
     // Если автоотбор — запускаем LLM
-    if (cachedSettings.thesisAutoSelect && getProviderSettings(cachedSettings).apiKey) {
+    const provSettings2 = getProviderSettings(cachedSettings);
+    const prov2 = cachedSettings.provider || 'z-ai';
+    if (cachedSettings.thesisAutoSelect && (prov2 === 'local' || provSettings2.apiKey)) {
       const mode = cachedSettings.thesisSelectionMode || 'full';
       selectedThesisIds = new Set(); // сбрасываем перед LLM
       cachedKeywordMatches = new Map();
@@ -569,11 +581,17 @@
     panelModel = curModelInfo.model;
 
     const zaiModels = getModelsForProvider(cachedSettings, 'z-ai');
+    const localModels = getModelsForProvider(cachedSettings, 'local');
     const orModels = getModelsForProvider(cachedSettings, 'openrouter');
 
     const zaiOptions = zaiModels.map(m => {
       const sel = (panelProvider === 'z-ai' && panelModel === m.id) ? ' selected' : '';
       return `<option value="z-ai:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
+    }).join('');
+
+    const localOptions = localModels.map(m => {
+      const sel = (panelProvider === 'local' && panelModel === m.id) ? ' selected' : '';
+      return `<option value="local:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
     }).join('');
 
     const orOptions = orModels.map(m => {
@@ -585,14 +603,14 @@
     let customModelOption = '';
     const currentPs = getProviderSettings(cachedSettings);
     if (currentPs.customModelInput) {
-      const isInList = [...zaiModels, ...orModels].some(m => m.id === currentPs.customModelInput);
+      const isInList = [...zaiModels, ...localModels, ...orModels].some(m => m.id === currentPs.customModelInput);
       if (!isInList) {
         customModelOption = `<option value="${escapeHtml(panelProvider)}:${escapeHtml(currentPs.customModelInput)}" selected>${escapeHtml(currentPs.customModelInput)} (custom)</option>`;
       }
     }
 
-    const providerLabel = panelProvider === 'openrouter' ? 'OR' : 'z-ai';
-    const providerColor = panelProvider === 'openrouter' ? '#60a5fa' : '#4ade80';
+    const providerLabel = panelProvider === 'openrouter' ? 'OR' : panelProvider === 'local' ? 'Local' : 'z-ai';
+    const providerColor = panelProvider === 'openrouter' ? '#60a5fa' : panelProvider === 'local' ? '#f59e0b' : '#4ade80';
 
     panel.innerHTML = `
       <div class="panel-header">
@@ -610,6 +628,7 @@
         <select class="model-select" id="model-selector">
           ${customModelOption}
           <optgroup label="z-ai">${zaiOptions}</optgroup>
+          <optgroup label="Local">${localOptions}</optgroup>
           <optgroup label="OpenRouter">${orOptions}</optgroup>
         </select>
         <span class="model-provider-badge" style="color:${providerColor}">${providerLabel}</span>
@@ -679,8 +698,8 @@
       // Update provider badge
       const badge = panel.querySelector('.model-provider-badge');
       if (badge) {
-        badge.textContent = newProvider === 'openrouter' ? 'OR' : 'z-ai';
-        badge.style.color = newProvider === 'openrouter' ? '#60a5fa' : '#4ade80';
+        badge.textContent = newProvider === 'openrouter' ? 'OR' : newProvider === 'local' ? 'Local' : 'z-ai';
+        badge.style.color = newProvider === 'openrouter' ? '#60a5fa' : newProvider === 'local' ? '#f59e0b' : '#4ade80';
       }
 
       console.log('[Commenter] Model changed:', newProvider, newModel);
@@ -1775,6 +1794,7 @@
     let modelBarHtml = '';
     if (type === 'prompt' && cachedSettings) {
       const zaiModels = getModelsForProvider(cachedSettings, 'z-ai');
+      const localModels = getModelsForProvider(cachedSettings, 'local');
       const orModels = getModelsForProvider(cachedSettings, 'openrouter');
 
       const zaiOptions = zaiModels.map(m => {
@@ -1782,19 +1802,25 @@
         return `<option value="z-ai:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
       }).join('');
 
+      const localOptions = localModels.map(m => {
+        const sel = (panelProvider === 'local' && panelModel === m.id) ? ' selected' : '';
+        return `<option value="local:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
+      }).join('');
+
       const orOptions = orModels.map(m => {
         const sel = (panelProvider === 'openrouter' && panelModel === m.id) ? ' selected' : '';
         return `<option value="openrouter:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
       }).join('');
 
-      const providerLabel = panelProvider === 'openrouter' ? 'OR' : 'z-ai';
-      const providerColor = panelProvider === 'openrouter' ? '#60a5fa' : '#4ade80';
+      const providerLabel = panelProvider === 'openrouter' ? 'OR' : panelProvider === 'local' ? 'Local' : 'z-ai';
+      const providerColor = panelProvider === 'openrouter' ? '#60a5fa' : panelProvider === 'local' ? '#f59e0b' : '#4ade80';
 
       modelBarHtml = `
         <div class="model-bar">
           <label for="model-selector">Модель:</label>
           <select class="model-select" id="model-selector">
             <optgroup label="z-ai">${zaiOptions}</optgroup>
+            <optgroup label="Local">${localOptions}</optgroup>
             <optgroup label="OpenRouter">${orOptions}</optgroup>
           </select>
           <span class="model-provider-badge" style="color:${providerColor}">${providerLabel}</span>
@@ -1867,7 +1893,7 @@
         if (cachedSettings) {
           cachedSettings.provider = newProvider;
           if (!cachedSettings.providers[newProvider]) {
-            cachedSettings.providers[newProvider] = { apiKey: '', model: '', customModelInput: '' };
+            cachedSettings.providers[newProvider] = { apiKey: '', model: '', customModelInput: '', baseUrl: '' };
           }
           cachedSettings.providers[newProvider].model = newModel;
           cachedSettings.providers[newProvider].customModelInput = '';
@@ -1876,8 +1902,8 @@
 
         const badge = panel.querySelector('.model-provider-badge');
         if (badge) {
-          badge.textContent = newProvider === 'openrouter' ? 'OR' : 'z-ai';
-          badge.style.color = newProvider === 'openrouter' ? '#60a5fa' : '#4ade80';
+          badge.textContent = newProvider === 'openrouter' ? 'OR' : newProvider === 'local' ? 'Local' : 'z-ai';
+          badge.style.color = newProvider === 'openrouter' ? '#60a5fa' : newProvider === 'local' ? '#f59e0b' : '#4ade80';
         }
 
         console.log('[Commenter] Model changed:', newProvider, newModel);

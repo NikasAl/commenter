@@ -9,7 +9,9 @@
   ],
   "host_permissions": [
     "https://api.z.ai/*",
-    "https://openrouter.ai/*"
+    "https://openrouter.ai/*",
+    "http://*/*",
+    "https://*/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",

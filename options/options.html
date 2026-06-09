@@ -369,9 +369,17 @@
         <div class="select-wrapper">
           <select id="provider-select" class="field-select">
             <option value="z-ai">Z-AI</option>
+            <option value="local">Локальный сервер</option>
             <option value="openrouter">OpenRouter</option>
           </select>
         </div>
+      </div>
+
+      <!-- Настройки локального сервера (только для local) -->
+      <div id="local-settings" class="field-group" style="display:none">
+        <label class="field-label" for="local-base-url">Адрес локального сервера</label>
+        <input type="text" id="local-base-url" class="field-input" placeholder="http://turbo:8080"/>
+        <p class="field-hint">OpenAI-совместимый API. Адрес сервера (без /v1/chat/completions). API ключ не обязателен.</p>
       </div>
 
       <div class="field-group">
