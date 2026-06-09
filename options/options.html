@@ -405,7 +405,18 @@
           <input type="checkbox" id="thesis-auto-select" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
           Автоотбор тезисов
         </label>
-        <p class="field-hint">При включении LLM автоматически выберет релевантные тезисы к тексту поста. Вы сможете скорректировать выбор вручную. Дополнительный API-запрос при сборе промпта.</p>
+        <p class="field-hint">При включении LLM автоматически выберет релевантные тезисы к тексту поста. Вы сможете скорректировать выбор вручную. Дополнительный API-запрос при сборке промпта.</p>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="thesis-selection-mode">Режим автоотбора</label>
+        <div class="select-wrapper">
+          <select id="thesis-selection-mode" class="field-select">
+            <option value="full">Полный анализ тезисов — LLM читает все тезисы и выбирает релевантные</option>
+            <option value="keywords">По ключевым словам — LLM извлекает ключевые слова из поста, затем поиск по тезисам локально</option>
+          </select>
+        </div>
+        <p class="field-hint"><strong>Полный анализ</strong> — точнее, но при большом количестве тезисов (сотни) расходует много токенов и стоит дорого. <strong>По ключевым словам</strong> — сначала анализируется только текст поста (дёшево), затем ключевые слова ищутся в тезисах обычным поиском. Рекомендуется при большом количестве тезисов.</p>
       </div>
 
       <button id="btn-save-settings" class="btn btn-primary btn-block">Сохранить настройки</button>

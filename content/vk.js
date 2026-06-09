@@ -79,6 +79,9 @@
   // Пользователь редактировал контекст вручную
   let isUserMessageEdited = false;
 
+  // Кэш совпадений ключевых слов для подсветки
+  let cachedKeywordMatches = new Map(); // thesisId -> Set<keyword>
+
   // ═══════════════════════════════════════════
   //  ИНИЦИАЛИЗАЦИЯ
   // ═══════════════════════════════════════════
@@ -171,7 +174,12 @@
 
       // Если автоотбор включён — запускаем LLM-селекцию
       if (settings.thesisAutoSelect && getProviderSettings(settings).apiKey) {
-        await runThesisSelection(context, topic, currentTopicTheses);
+        const mode = settings.thesisSelectionMode || 'full';
+        if (mode === 'keywords') {
+          await runKeywordSelection(context, topic, currentTopicTheses);
+        } else {
+          await runThesisSelection(context, topic, currentTopicTheses);
+        }
       }
     } else {
       selectedThesisIds = new Set();
@@ -344,6 +352,107 @@
     updatePanelStatus(`Выбрано ${selectedThesisIds.size} из ${theses.length} тезисов`);
   }
 
+  // ═══════════════════════════════════════════
+  //  ОТБОР ТЕЗИСОВ ПО КЛЮЧЕВЫМ СЛОВАМ
+  // ═══════════════════════════════════════════
+
+  const KEYWORDS_SYSTEM_PROMPT = `Ты — помощник по извлечению ключевых слов. Дан текст поста. Верни список ключевых слов и коротких фраз (2-4 слова), которые отражают основные темы, сущности и понятия, обсуждаемые в посте.
+
+Формат вывода — СТРОГО JSON-массив строк:
+["ключевое слово 1", "фраза из двух слов", "ещё слово", ...]
+
+Правила:
+- Верни от 5 до 20 ключевых слов и коротких фраз
+- Включи имена, названия, термины, темы, упоминаемые в посте
+- Используй нормальную форму слов (именительный падеж, единственное число)
+- Фразы из 2-4 слов бери из текста поста
+- НЕ добавляй пояснения до или после JSON
+- Если текст слишком короткий или бессмысленный — верни пустой массив []`;
+
+  function parseKeywords(responseText) {
+    const text = responseText.trim();
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        return parsed.map(k => String(k).trim().toLowerCase()).filter(k => k.length >= 2);
+      }
+    } catch {}
+    // Fallback: try to extract comma-separated words
+    const cleaned = text.replace(/^\[|\]$/g, '').replace(/"/g, '');
+    if (!cleaned.trim()) return [];
+    return cleaned.split(',').map(k => k.trim().toLowerCase()).filter(k => k.length >= 2);
+  }
+
+  /**
+   * Поиск тезисов по ключевым словам — локально, без LLM.
+   * Возвращает Set id тезисов, в которых найдено хотя бы одно ключевое слово.
+   * Также возвращает Map thesisId -> Set<matchedKeywords> для подсветки.
+   */
+  function findThesesByKeywords(theses, keywords) {
+    const matched = new Map(); // thesisId -> Set<matchedKeywords>
+    for (const thesis of theses) {
+      const fullText = (thesis.question + ' ' + thesis.answer).toLowerCase();
+      const thesisMatches = new Set();
+      for (const kw of keywords) {
+        if (fullText.includes(kw)) {
+          thesisMatches.add(kw);
+        }
+      }
+      if (thesisMatches.size > 0) {
+        matched.set(thesis.id, thesisMatches);
+      }
+    }
+    return matched;
+  }
+
+  async function runKeywordSelection(context, topic, theses) {
+    const ps = getProviderSettings(cachedSettings || {});
+    if (!theses.length || !ps.apiKey || isSelectingTheses) return;
+    isSelectingTheses = true;
+    setThesisSelectorLoading(true, 'Извлекаю ключевые слова из поста...');
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'CHAT_REQUEST',
+        payload: {
+          provider: cachedSettings.provider || 'z-ai',
+          apiKey: ps.apiKey,
+          model: ps.customModelInput || ps.model || getDefaultModel(cachedSettings.provider),
+          systemPrompt: KEYWORDS_SYSTEM_PROMPT,
+          userMessage: context.postText || '(без текста)',
+        },
+      });
+
+      if (response.success) {
+        const keywords = parseKeywords(response.data);
+        console.log('[Commenter] Keywords extracted:', keywords.join(', '));
+
+        if (keywords.length === 0) {
+          // Нет ключевых слов — выбираем все
+          selectedThesisIds = new Set(theses.map(t => t.id));
+          console.log('[Commenter] No keywords found, selecting all theses');
+        } else {
+          const matched = findThesesByKeywords(theses, keywords);
+          selectedThesisIds = new Set(matched.keys());
+          // Сохраняем ключевые слова для подсветки
+          cachedKeywordMatches = matched;
+          console.log('[Commenter] Keyword search matched', selectedThesisIds.size, 'of', theses.length, 'theses');
+        }
+      } else {
+        console.warn('[Commenter] Keyword extraction failed:', response.error);
+      }
+    } catch (err) {
+      console.warn('[Commenter] Keyword extraction error:', err);
+    }
+
+    isSelectingTheses = false;
+    updateThesisCheckboxes();
+    updateThesisListHtml(getPanel());
+    updatePromptFromSelection();
+    setThesisSelectorLoading(false);
+    updatePanelStatus(`Выбрано ${selectedThesisIds.size} из ${theses.length} тезисов`);
+  }
+
   /**
    * Пересобрать промпт при смене темы в дропдауне.
    */
@@ -389,10 +498,17 @@
 
     // Если автоотбор — запускаем LLM
     if (cachedSettings.thesisAutoSelect && getProviderSettings(cachedSettings).apiKey) {
+      const mode = cachedSettings.thesisSelectionMode || 'full';
       selectedThesisIds = new Set(); // сбрасываем перед LLM
+      cachedKeywordMatches = new Map();
       updateThesisCheckboxes();
+      updateThesisListHtml(panel);
       updatePromptFromSelection();
-      await runThesisSelection(cachedContext, topic, currentTopicTheses);
+      if (mode === 'keywords') {
+        await runKeywordSelection(cachedContext, topic, currentTopicTheses);
+      } else {
+        await runThesisSelection(cachedContext, topic, currentTopicTheses);
+      }
     } else {
       selectedThesisIds = new Set(currentTopicTheses.map(t => t.id));
       updateThesisCheckboxes();
@@ -514,6 +630,10 @@
           <button class="panel-btn btn-ts-none">Снять</button>
         </div>
       </div>
+      <div class="ts-search-bar">
+        <input type="text" class="ts-search-input" id="ts-search-input" placeholder="Поиск по тезисам...">
+        <span class="ts-search-count" id="ts-search-count"></span>
+      </div>
       ${loadingHtml}
       <div class="ts-list">${thesisItemsHtml}</div>
       <div class="panel-body">
@@ -603,6 +723,11 @@
       updatePromptFromSelection();
     });
 
+    // Event: search filter
+    panel.querySelector('#ts-search-input')?.addEventListener('input', (e) => {
+      updateThesisListHtml(panel);
+    });
+
     // Event: copy
     panel.querySelector('.btn-copy-panel')?.addEventListener('click', () => {
       if (lastBuiltPrompt) {
@@ -647,15 +772,63 @@
   function updateThesisListHtml(panel) {
     const listEl = panel?.querySelector('.ts-list');
     if (!listEl) return;
+
+    const searchInput = panel.querySelector('#ts-search-input');
+    const searchCountEl = panel.querySelector('#ts-search-count');
+    const searchText = (searchInput?.value || '').trim().toLowerCase();
+    const searchTerms = searchText ? searchText.split(/\s+/).filter(w => w.length >= 2) : [];
+
+    let visibleCount = 0;
+    const totalCount = currentTopicTheses.length;
+
     listEl.innerHTML = currentTopicTheses.map((t, i) => {
       const checked = selectedThesisIds.has(t.id) ? ' checked' : '';
-      const qShort = escapeHtml(t.question.length > 55 ? t.question.slice(0, 55) + '...' : t.question);
-      const aShort = escapeHtml(t.answer.length > 55 ? t.answer.slice(0, 55) + '...' : t.answer);
-      return `<label class="ts-item${selectedThesisIds.has(t.id) ? ' ts-checked' : ''}">
+
+      // Determine if this thesis matches the search
+      const fullText = (t.question + ' ' + t.answer).toLowerCase();
+      let matchesSearch = true;
+      if (searchTerms.length > 0) {
+        matchesSearch = searchTerms.every(term => fullText.includes(term));
+      }
+      if (!matchesSearch && searchText.length > 0 && searchText.length < 2) {
+        // Single character — still show all
+        matchesSearch = true;
+      }
+
+      // Keyword matches for highlighting
+      const kwMatches = cachedKeywordMatches.get(t.id);
+      const allHighlightTerms = new Set([...(kwMatches || []), ...searchTerms]);
+
+      // Build displayed text with highlighting
+      let qShort = t.question.length > 55 ? t.question.slice(0, 55) + '...' : t.question;
+      let aShort = t.answer.length > 55 ? t.answer.slice(0, 55) + '...' : t.answer;
+
+      if (allHighlightTerms.size > 0) {
+        qShort = highlightTerms(qShort, allHighlightTerms);
+        aShort = highlightTerms(aShort, allHighlightTerms);
+      } else {
+        qShort = escapeHtml(qShort);
+        aShort = escapeHtml(aShort);
+      }
+
+      const hiddenStyle = (!matchesSearch && searchTerms.length > 0) ? ' style="display:none"' : '';
+      if (matchesSearch || searchTerms.length === 0) visibleCount++;
+
+      return `<label class="ts-item${selectedThesisIds.has(t.id) ? ' ts-checked' : ''}"${hiddenStyle}>
         <input type="checkbox" class="ts-cb" data-tid="${escapeHtml(t.id)}"${checked}>
         <span class="ts-text"><strong>${i + 1}.</strong> В: ${qShort} | О: ${aShort}</span>
       </label>`;
     }).join('');
+
+    // Update search count
+    if (searchCountEl) {
+      if (searchTerms.length > 0) {
+        searchCountEl.textContent = `${visibleCount} из ${totalCount}`;
+      } else {
+        searchCountEl.textContent = '';
+      }
+    }
+
     // Rebind events
     listEl.addEventListener('change', (e) => {
       if (e.target.classList.contains('ts-cb')) {
@@ -673,6 +846,24 @@
     if (countEl) countEl.textContent = selectedThesisIds.size;
   }
 
+  /**
+   * Подсветка совпадающих терминов в тексте.
+   * Оборачивает совпадения в <mark> тег.
+   */
+  function highlightTerms(text, terms) {
+    let html = escapeHtml(text);
+    for (const term of terms) {
+      const escapedTerm = escapeHtml(term);
+      const regex = new RegExp('(' + escapeRegex(escapedTerm) + ')', 'gi');
+      html = html.replace(regex, '<mark class="ts-hl">$1</mark>');
+    }
+    return html;
+  }
+
+  function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   function updateThesisCheckboxes() {
     const panel = getPanel();
     if (!panel) return;
@@ -685,14 +876,14 @@
     if (countEl) countEl.textContent = selectedThesisIds.size;
   }
 
-  function setThesisSelectorLoading(loading) {
+  function setThesisSelectorLoading(loading, customText) {
     const panel = getPanel();
     if (!panel) return;
     let el = panel.querySelector('.ts-loading');
     if (loading && !el) {
       el = document.createElement('div');
       el.className = 'ts-loading';
-      el.innerHTML = '<span class="loading-spinner"></span>Анализирую тезисы...';
+      el.innerHTML = '<span class="loading-spinner"></span>' + escapeHtml(customText || 'Анализирую тезисы...');
       const bar = panel.querySelector('.ts-bar');
       if (bar) bar.after(el);
     } else if (!loading && el) {
@@ -1358,6 +1549,22 @@
     .ts-text strong { color: #a1a1aa; }
     .ts-item-checked .ts-text strong { color: #e4e4e7; }
     .ts-disabled .ts-item { opacity: 0.5; pointer-events: none; }
+    .ts-search-bar {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 14px; background: #1e1f24; border-bottom: 1px solid #3a3b42;
+    }
+    .ts-search-input {
+      flex: 1; font-size: 11px; padding: 3px 8px;
+      background: #25262b; border: 1px solid #3a3b42; border-radius: 4px;
+      color: #d4d4d8; outline: none;
+    }
+    .ts-search-input::placeholder { color: #52525b; }
+    .ts-search-input:focus { border-color: #6366f1; }
+    .ts-search-count { font-size: 10px; color: #6366f1; white-space: nowrap; font-weight: 600; }
+    .ts-hl {
+      background: rgba(251,191,36,0.25); color: #fbbf24;
+      border-radius: 2px; padding: 0 1px;
+    }
     .model-bar {
       display: flex; align-items: center; gap: 8px;
       padding: 6px 14px; background: #22232a; border-bottom: 1px solid #3a3b42;

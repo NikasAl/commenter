@@ -1583,6 +1583,8 @@ async function loadSettings() {
   const settings = await Storage.getSettings();
   DOM.providerSelect.value = settings.provider || 'z-ai';
   DOM.thesisAutoSelect.checked = !!settings.thesisAutoSelect;
+  const modeSelect = document.getElementById('thesis-selection-mode');
+  if (modeSelect) modeSelect.value = settings.thesisSelectionMode || 'full';
   await updateModelOptions();
   const ps = Storage.getProviderSettings(settings);
   DOM.apiKeyInput.value = ps.apiKey || '';
@@ -1607,6 +1609,8 @@ async function saveSettings() {
   const settings = await Storage.getSettings();
   settings.provider = DOM.providerSelect.value;
   settings.thesisAutoSelect = DOM.thesisAutoSelect.checked;
+  const modeSelect = document.getElementById('thesis-selection-mode');
+  if (modeSelect) settings.thesisSelectionMode = modeSelect.value;
   const provider = settings.provider || 'z-ai';
   if (!settings.providers) settings.providers = {};
   if (!settings.providers[provider]) settings.providers[provider] = {};
