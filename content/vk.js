@@ -185,7 +185,7 @@
       // Если автоотбор включён — запускаем LLM-селекцию
       const provSettings = getProviderSettings(settings);
       const prov = settings.provider || 'z-ai';
-      if (settings.thesisAutoSelect && (prov === 'local' || provSettings.apiKey)) {
+      if (settings.thesisAutoSelect && (prov === 'local' || prov === 'gigachat' || provSettings.apiKey)) {
         const mode = settings.thesisSelectionMode || 'full';
         if (mode === 'keywords') {
           await runKeywordSelection(context, topic, currentTopicTheses);
@@ -608,7 +608,7 @@
     // Если автоотбор — запускаем LLM
     const provSettings2 = getProviderSettings(cachedSettings);
     const prov2 = cachedSettings.provider || 'z-ai';
-    if (cachedSettings.thesisAutoSelect && (prov2 === 'local' || provSettings2.apiKey)) {
+    if (cachedSettings.thesisAutoSelect && (prov2 === 'local' || prov2 === 'gigachat' || provSettings2.apiKey)) {
       const mode = cachedSettings.thesisSelectionMode || 'full';
       selectedThesisIds = new Set(); // сбрасываем перед LLM
       cachedKeywordMatches = new Map();
@@ -808,8 +808,8 @@
       // Update provider badge
       const badge = panel.querySelector('.model-provider-badge');
       if (badge) {
-        badge.textContent = newProvider === 'openrouter' ? 'OR' : newProvider === 'local' ? 'Local' : 'z-ai';
-        badge.style.color = newProvider === 'openrouter' ? '#60a5fa' : newProvider === 'local' ? '#f59e0b' : '#4ade80';
+        badge.textContent = newProvider === 'openrouter' ? 'OR' : newProvider === 'local' ? 'Local' : newProvider === 'gigachat' ? 'GC' : 'z-ai';
+        badge.style.color = newProvider === 'openrouter' ? '#60a5fa' : newProvider === 'local' ? '#f59e0b' : newProvider === 'gigachat' ? '#21c55d' : '#4ade80';
       }
 
       console.log('[Commenter] Model changed:', newProvider, newModel);
@@ -2049,8 +2049,8 @@
 
         const badge = panel.querySelector('.model-provider-badge');
         if (badge) {
-          badge.textContent = newProvider === 'openrouter' ? 'OR' : newProvider === 'local' ? 'Local' : 'z-ai';
-          badge.style.color = newProvider === 'openrouter' ? '#60a5fa' : newProvider === 'local' ? '#f59e0b' : '#4ade80';
+          badge.textContent = newProvider === 'openrouter' ? 'OR' : newProvider === 'local' ? 'Local' : newProvider === 'gigachat' ? 'GC' : 'z-ai';
+          badge.style.color = newProvider === 'openrouter' ? '#60a5fa' : newProvider === 'local' ? '#f59e0b' : newProvider === 'gigachat' ? '#21c55d' : '#4ade80';
         }
 
         console.log('[Commenter] Model changed:', newProvider, newModel);

@@ -189,7 +189,7 @@ async function handleGenerate() {
 
   const settings = await Storage.getSettings();
   const providerSettings = Storage.getProviderSettings(settings);
-  if (!providerSettings.apiKey && settings.provider !== 'local') { showError('API ключ не настроен. Перейдите в «Настройки».'); return; }
+  if (!providerSettings.apiKey && settings.provider !== 'local' && settings.provider !== 'gigachat') { showError('API ключ не настроен. Перейдите в «Настройки».'); return; }
 
   const model = providerSettings.customModelInput || providerSettings.model || getDefaultModel(settings.provider);
 
@@ -1667,6 +1667,13 @@ async function saveSettings() {
     const baseUrlInput = document.getElementById('local-base-url');
     settings.providers[provider].baseUrl = baseUrlInput ? baseUrlInput.value.trim().replace(/\/+$/, '') : 'http://turbo:8080';
   }
+  // Сохраняем credentials для GigaChat
+  if (provider === 'gigachat') {
+    const gcIdInput = document.getElementById('gigachat-client-id');
+    const gcSecretInput = document.getElementById('gigachat-client-secret');
+    if (gcIdInput) settings.providers[provider].gigachatClientId = gcIdInput.value.trim();
+    if (gcSecretInput) settings.providers[provider].gigachatClientSecret = gcSecretInput.value.trim();
+  }
   await Storage.saveSettings(settings);
   DOM.settingsSavedToast.style.display = 'block';
   setTimeout(() => { DOM.settingsSavedToast.style.display = 'none'; }, 2000);
@@ -1766,6 +1773,7 @@ function createProvider(providerName) {
 function getDefaultModel(provider) {
   const defaults = Storage.DEFAULT_MODELS[provider || 'z-ai'];
   if (provider === 'local') return defaults?.[0]?.id || 'gemma-4-26b';
+  if (provider === 'gigachat') return 'GigaChat-2';
   return defaults?.[0]?.id || (provider === 'openrouter' ? 'google/gemini-2.0-flash-001' : 'GLM-4.7-Flash');
 }
 

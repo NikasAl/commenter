@@ -29,6 +29,7 @@ INCLUDE = [
     "lib/providers/z-ai.js",
     "lib/providers/openrouter.js",
     "lib/providers/local.js",
+    "lib/providers/gigachat.js",
     "assets/icons/icon16.png",
     "assets/icons/icon48.png",
     "assets/icons/icon128.png",
