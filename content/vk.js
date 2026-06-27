@@ -380,7 +380,12 @@
 - Если текст слишком короткий или бессмысленный — верни пустой массив []`;
 
   function parseKeywords(responseText) {
-    const text = responseText.trim();
+    let text = responseText.trim();
+    // Strip markdown code block wrapper if present (```json ... ``` or ``` ... ```)
+    const codeBlockMatch = text.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/m);
+    if (codeBlockMatch) {
+      text = codeBlockMatch[1].trim();
+    }
     try {
       const parsed = JSON.parse(text);
       if (Array.isArray(parsed)) {
