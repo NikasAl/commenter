@@ -84,6 +84,8 @@
 
   // Кэш совпадений ключевых слов для подсветки
   let cachedKeywordMatches = new Map(); // thesisId -> Set<keyword>
+  let cachedKeywords = [];              // все извлечённые ключевые слова
+  let disabledKeywords = new Set();     // отключённые ключевые слова
 
   // ═══════════════════════════════════════════
   //  ИНИЦИАЛИЗАЦИЯ
@@ -413,6 +415,86 @@
     return matched;
   }
 
+  /**
+   * Повторный поиск по ключевым словам с учётом disabledKeywords.
+   * Вызывается при тоггле чипса ключевого слова.
+   */
+  function rerunKeywordMatch(theses) {
+    const activeKeywords = cachedKeywords.filter(kw => !disabledKeywords.has(kw));
+    if (activeKeywords.length === 0) {
+      // Все ключевые слова отключены — выбираем все тезисы
+      selectedThesisIds = new Set(theses.map(t => t.id));
+      cachedKeywordMatches = new Map();
+      return;
+    }
+    const matched = findThesesByKeywords(theses, activeKeywords);
+    selectedThesisIds = new Set(matched.keys());
+    cachedKeywordMatches = matched;
+  }
+
+  /**
+   * Рендерит чипсы ключевых слов между search-bar и ts-list.
+   * Каждый чипс — кликабельный тег, который можно отключить/включить.
+   */
+  function renderKeywordChips() {
+    const panel = getPanel();
+    if (!panel) return;
+
+    // Удаляем старый контейнер если есть
+    const old = panel.querySelector('.kw-chips-bar');
+    if (old) old.remove();
+
+    if (cachedKeywords.length === 0) return;
+
+    const container = document.createElement('div');
+    container.className = 'kw-chips-bar';
+
+    const label = document.createElement('span');
+    label.className = 'kw-chips-label';
+    label.textContent = 'Ключевые слова:';
+    container.appendChild(label);
+
+    const chipsWrap = document.createElement('div');
+    chipsWrap.className = 'kw-chips-wrap';
+
+    for (const kw of cachedKeywords) {
+      const chip = document.createElement('span');
+      chip.className = 'kw-chip' + (disabledKeywords.has(kw) ? ' kw-chip-off' : '');
+      chip.textContent = kw;
+      chip.dataset.kw = kw;
+
+      chip.addEventListener('click', () => {
+        if (disabledKeywords.has(kw)) {
+          disabledKeywords.delete(kw);
+          chip.classList.remove('kw-chip-off');
+        } else {
+          disabledKeywords.add(kw);
+          chip.classList.add('kw-chip-off');
+        }
+
+        // Пересчитываем совпадения и обновляем UI
+        rerunKeywordMatch(currentTopicTheses);
+        updateThesisCheckboxes();
+        updateThesisListHtml(panel);
+        updatePromptFromSelection();
+        updatePanelStatus(`Выбрано ${selectedThesisIds.size} из ${currentTopicTheses.length} тезисов`);
+      });
+
+      chipsWrap.appendChild(chip);
+    }
+
+    container.appendChild(chipsWrap);
+
+    // Вставляем после ts-search-bar (или после ts-bar если search-bar нет)
+    const searchbar = panel.querySelector('.ts-search-bar');
+    const tsbar = panel.querySelector('.ts-bar');
+    if (searchbar) {
+      searchbar.after(container);
+    } else if (tsbar) {
+      tsbar.after(container);
+    }
+  }
+
   async function runKeywordSelection(context, topic, theses) {
     const ps = getProviderSettings(cachedSettings || {});
     const prov = cachedSettings.provider || 'z-ai';
@@ -437,17 +519,22 @@
         const keywords = parseKeywords(response.data);
         console.log('[Commenter] Keywords extracted:', keywords.join(', '));
 
+        // Сохраняем все ключевые слова и сбрасываем disabled
+        cachedKeywords = keywords;
+        disabledKeywords = new Set();
+
         if (keywords.length === 0) {
           // Нет ключевых слов — выбираем все
           selectedThesisIds = new Set(theses.map(t => t.id));
+          cachedKeywordMatches = new Map();
           console.log('[Commenter] No keywords found, selecting all theses');
         } else {
-          const matched = findThesesByKeywords(theses, keywords);
-          selectedThesisIds = new Set(matched.keys());
-          // Сохраняем ключевые слова для подсветки
-          cachedKeywordMatches = matched;
+          rerunKeywordMatch(theses);
           console.log('[Commenter] Keyword search matched', selectedThesisIds.size, 'of', theses.length, 'theses');
         }
+
+        // Рендерим чипсы ключевых слов
+        renderKeywordChips();
       } else {
         console.warn('[Commenter] Keyword extraction failed:', response.error);
       }
@@ -513,6 +600,10 @@
       const mode = cachedSettings.thesisSelectionMode || 'full';
       selectedThesisIds = new Set(); // сбрасываем перед LLM
       cachedKeywordMatches = new Map();
+      cachedKeywords = [];
+      disabledKeywords = new Set();
+      // Удаляем старые чипсы
+      getPanel()?.querySelector('.kw-chips-bar')?.remove();
       updateThesisCheckboxes();
       updateThesisListHtml(panel);
       updatePromptFromSelection();
@@ -1583,6 +1674,36 @@
     .ts-hl {
       background: rgba(251,191,36,0.25); color: #fbbf24;
       border-radius: 2px; padding: 0 1px;
+    }
+    .kw-chips-bar {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 6px 14px; background: #1e1f24;
+      border-bottom: 1px solid #3a3b42;
+    }
+    .kw-chips-label {
+      font-size: 10px; color: #71717a; white-space: nowrap;
+      padding-top: 3px; flex-shrink: 0;
+    }
+    .kw-chips-wrap {
+      display: flex; flex-wrap: wrap; gap: 4px;
+    }
+    .kw-chip {
+      display: inline-block; font-size: 10px; line-height: 1.3;
+      padding: 2px 7px; border-radius: 10px; cursor: pointer;
+      background: rgba(251,191,36,0.15); color: #fbbf24;
+      border: 1px solid rgba(251,191,36,0.3);
+      transition: all 0.15s; user-select: none;
+    }
+    .kw-chip:hover {
+      background: rgba(251,191,36,0.25);
+    }
+    .kw-chip.kw-chip-off {
+      background: rgba(113,113,122,0.1); color: #52525b;
+      border-color: rgba(113,113,122,0.2);
+      text-decoration: line-through;
+    }
+    .kw-chip.kw-chip-off:hover {
+      background: rgba(113,113,122,0.2);
     }
     .model-bar {
       display: flex; align-items: center; gap: 8px;
