@@ -382,6 +382,15 @@
         <p class="field-hint">OpenAI-совместимый API. Адрес сервера (без /v1/chat/completions). API ключ не обязателен.</p>
       </div>
 
+      <!-- Настройки GigaChat (только для gigachat) -->
+      <div id="gigachat-settings" class="field-group" style="display:none">
+        <label class="field-label" for="gigachat-client-id">CLIENT_ID</label>
+        <input type="text" id="gigachat-client-id" class="field-input" placeholder="Ваш CLIENT_ID от developers.sber.ru"/>
+        <label class="field-label" for="gigachat-client-secret" style="margin-top:10px">CLIENT_SECRET</label>
+        <input type="password" id="gigachat-client-secret" class="field-input" placeholder="Ваш CLIENT_SECRET от developers.sber.ru"/>
+        <p class="field-hint">Данные авторизации из личного кабинета <a href="https://developers.sber.ru/studio/workspaces/my-space/get/gigachat-api" target="_blank" style="color:var(--accent)">developers.sber.ru</a>. Scope: GIGACHAT_API_PERS.</p>
+      </div>
+
       <div class="field-group">
         <label class="field-label" for="api-key-input">API Ключ</label>
         <input type="password" id="api-key-input" class="field-input" placeholder="Вставьте API ключ..."/>

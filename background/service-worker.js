@@ -7,12 +7,14 @@
 import { ZAiProvider } from '../lib/providers/z-ai.js';
 import { OpenRouterProvider } from '../lib/providers/openrouter.js';
 import { LocalProvider } from '../lib/providers/local.js';
+import { GigaChatProvider } from '../lib/providers/gigachat.js';
 
 // Инициализация провайдеров
 const providers = {
   'z-ai': new ZAiProvider(),
   'openrouter': new OpenRouterProvider(),
   'local': new LocalProvider(),
+  'gigachat': new GigaChatProvider(),
 };
 
 // Слушатель сообщений от popup
@@ -40,7 +42,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
  * Обработка чат-запроса к LLM
  */
 async function handleChatRequest(payload) {
-  const { provider: providerName, apiKey, model, systemPrompt, userMessage, baseUrl } = payload;
+  const { provider: providerName, apiKey, model, systemPrompt, userMessage, baseUrl, gigachatClientId, gigachatClientSecret } = payload;
   const provider = providers[providerName];
 
   if (!provider) {
@@ -52,8 +54,14 @@ async function handleChatRequest(payload) {
     provider.setBaseUrl(baseUrl);
   }
 
-  // Локальный провайдер может работать без API ключа
-  if (providerName !== 'local' && !apiKey) {
+  // Для GigaChat формируем apiKey как JSON с clientId/clientSecret
+  let effectiveApiKey = apiKey;
+  if (providerName === 'gigachat') {
+    effectiveApiKey = JSON.stringify({ clientId: gigachatClientId || '', clientSecret: gigachatClientSecret || '' });
+  }
+
+  // Локальный и GigaChat провайдеры могут работать без обычного API ключа
+  if (providerName !== 'local' && providerName !== 'gigachat' && !apiKey) {
     throw new Error(`API ключ не указан для провайдера "${providerName}"`);
   }
 
@@ -61,7 +69,7 @@ async function handleChatRequest(payload) {
     const response = await provider.chat({
       systemPrompt,
       userMessage,
-      apiKey,
+      apiKey: effectiveApiKey,
       model,
     });
     return response;

@@ -6,6 +6,7 @@
 import { ZAiProvider } from '../lib/providers/z-ai.js';
 import { OpenRouterProvider } from '../lib/providers/openrouter.js';
 import { LocalProvider } from '../lib/providers/local.js';
+import { GigaChatProvider } from '../lib/providers/gigachat.js';
 
 const Storage = window.Storage;
 
@@ -1611,15 +1612,27 @@ async function loadSettings() {
   if (ps.model) DOM.modelSelect.value = ps.model;
   // Показать/скрыть настройки локального сервера
   const isLocal = (settings.provider || 'z-ai') === 'local';
+  const isGigaChat = (settings.provider || 'z-ai') === 'gigachat';
   const localSettings = document.getElementById('local-settings');
+  const gigachatSettings = document.getElementById('gigachat-settings');
   const apiKeyGroup = DOM.apiKeyInput?.closest('.field-group');
   if (isLocal) {
     if (localSettings) localSettings.style.display = '';
+    if (gigachatSettings) gigachatSettings.style.display = 'none';
     const baseUrlInput = document.getElementById('local-base-url');
     if (baseUrlInput) baseUrlInput.value = ps.baseUrl || 'http://turbo:8080';
     if (apiKeyGroup) apiKeyGroup.style.display = 'none';
+  } else if (isGigaChat) {
+    if (localSettings) localSettings.style.display = 'none';
+    if (gigachatSettings) gigachatSettings.style.display = '';
+    if (apiKeyGroup) apiKeyGroup.style.display = 'none';
+    const gcIdInput = document.getElementById('gigachat-client-id');
+    const gcSecretInput = document.getElementById('gigachat-client-secret');
+    if (gcIdInput) gcIdInput.value = ps.gigachatClientId || '';
+    if (gcSecretInput) gcSecretInput.value = ps.gigachatClientSecret || '';
   } else {
     if (localSettings) localSettings.style.display = 'none';
+    if (gigachatSettings) gigachatSettings.style.display = 'none';
     if (apiKeyGroup) apiKeyGroup.style.display = '';
   }
 }
@@ -1668,7 +1681,7 @@ async function openModelsEditor() {
   modelsEditorState.provider = provider;
   const settings = await Storage.getSettings();
   modelsEditorState.models = Storage.getModelsForProvider(settings, provider).map(m => ({ ...m }));
-  const providerLabel = provider === 'z-ai' ? 'Z-AI' : provider === 'local' ? 'Локальный сервер' : 'OpenRouter';
+  const providerLabel = provider === 'z-ai' ? 'Z-AI' : provider === 'local' ? 'Локальный сервер' : provider === 'gigachat' ? 'GigaChat' : 'OpenRouter';
   DOM.modelsModalTitle.textContent = `Модели — ${providerLabel}`;
   renderModelsEditorList();
   DOM.modelsModal.style.display = 'flex';
@@ -1746,6 +1759,7 @@ async function saveModelsEditor() {
 
 function createProvider(providerName) {
   if (providerName === 'local') return new LocalProvider();
+  if (providerName === 'gigachat') return new GigaChatProvider();
   return providerName === 'openrouter' ? new OpenRouterProvider() : new ZAiProvider();
 }
 

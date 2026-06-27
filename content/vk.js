@@ -59,6 +59,11 @@
     'local': [
       { id: 'gemma-4-26b', name: 'Gemma 4 26B' },
     ],
+    'gigachat': [
+      { id: 'GigaChat-2', name: 'GigaChat-2' },
+      { id: 'GigaChat-2-mini', name: 'GigaChat-2 Mini' },
+      { id: 'GigaChat', name: 'GigaChat' },
+    ],
     'openrouter': [
       { id: 'google/gemma-4-31b-it', name: 'Gemma 4 31B IT' },
       { id: 'google/gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite' },
@@ -235,7 +240,7 @@
     const useProvider = panelProvider || settings.provider || 'z-ai';
     const useModel = panelModel || null;
     const ps = settings.providers?.[useProvider] || getProviderSettings(settings);
-    if (!ps.apiKey && useProvider !== 'local') {
+    if (!ps.apiKey && useProvider !== 'local' && useProvider !== 'gigachat') {
       showPanel('Ошибка', `API ключ не настроен для провайдера ${useProvider}. Откройте настройки расширения.`, 'error');
       return;
     }
@@ -254,6 +259,8 @@
           systemPrompt: lastBuiltPrompt.systemPrompt,
           userMessage: lastBuiltPrompt.userMessage,
           baseUrl: ps.baseUrl,
+          gigachatClientId: ps.gigachatClientId || '',
+          gigachatClientSecret: ps.gigachatClientSecret || '',
         },
       });
 
@@ -677,6 +684,7 @@
     panelModel = curModelInfo.model;
 
     const zaiModels = getModelsForProvider(cachedSettings, 'z-ai');
+    const gcModels = getModelsForProvider(cachedSettings, 'gigachat');
     const localModels = getModelsForProvider(cachedSettings, 'local');
     const orModels = getModelsForProvider(cachedSettings, 'openrouter');
 
@@ -690,6 +698,11 @@
       return `<option value="local:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
     }).join('');
 
+    const gcOptions = gcModels.map(m => {
+      const sel = (panelProvider === 'gigachat' && panelModel === m.id) ? ' selected' : '';
+      return `<option value="gigachat:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
+    }).join('');
+
     const orOptions = orModels.map(m => {
       const sel = (panelProvider === 'openrouter' && panelModel === m.id) ? ' selected' : '';
       return `<option value="openrouter:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
@@ -699,14 +712,14 @@
     let customModelOption = '';
     const currentPs = getProviderSettings(cachedSettings);
     if (currentPs.customModelInput) {
-      const isInList = [...zaiModels, ...localModels, ...orModels].some(m => m.id === currentPs.customModelInput);
+      const isInList = [...zaiModels, ...gcModels, ...localModels, ...orModels].some(m => m.id === currentPs.customModelInput);
       if (!isInList) {
         customModelOption = `<option value="${escapeHtml(panelProvider)}:${escapeHtml(currentPs.customModelInput)}" selected>${escapeHtml(currentPs.customModelInput)} (custom)</option>`;
       }
     }
 
-    const providerLabel = panelProvider === 'openrouter' ? 'OR' : panelProvider === 'local' ? 'Local' : 'z-ai';
-    const providerColor = panelProvider === 'openrouter' ? '#60a5fa' : panelProvider === 'local' ? '#f59e0b' : '#4ade80';
+    const providerLabel = panelProvider === 'openrouter' ? 'OR' : panelProvider === 'local' ? 'Local' : panelProvider === 'gigachat' ? 'GC' : 'z-ai';
+    const providerColor = panelProvider === 'openrouter' ? '#60a5fa' : panelProvider === 'local' ? '#f59e0b' : panelProvider === 'gigachat' ? '#21c55d' : '#4ade80';
 
     panel.innerHTML = `
       <div class="panel-header">
@@ -724,6 +737,7 @@
         <select class="model-select" id="model-selector">
           ${customModelOption}
           <optgroup label="z-ai">${zaiOptions}</optgroup>
+          <optgroup label="GigaChat">${gcOptions}</optgroup>
           <optgroup label="Local">${localOptions}</optgroup>
           <optgroup label="OpenRouter">${orOptions}</optgroup>
         </select>
@@ -1920,12 +1934,18 @@
     let modelBarHtml = '';
     if (type === 'prompt' && cachedSettings) {
       const zaiModels = getModelsForProvider(cachedSettings, 'z-ai');
+      const gcModels = getModelsForProvider(cachedSettings, 'gigachat');
       const localModels = getModelsForProvider(cachedSettings, 'local');
       const orModels = getModelsForProvider(cachedSettings, 'openrouter');
 
       const zaiOptions = zaiModels.map(m => {
         const sel = (panelProvider === 'z-ai' && panelModel === m.id) ? ' selected' : '';
         return `<option value="z-ai:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
+      }).join('');
+
+      const gcOptions = gcModels.map(m => {
+        const sel = (panelProvider === 'gigachat' && panelModel === m.id) ? ' selected' : '';
+        return `<option value="gigachat:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
       }).join('');
 
       const localOptions = localModels.map(m => {
@@ -1938,14 +1958,15 @@
         return `<option value="openrouter:${escapeHtml(m.id)}"${sel}>${escapeHtml(m.name)}</option>`;
       }).join('');
 
-      const providerLabel = panelProvider === 'openrouter' ? 'OR' : panelProvider === 'local' ? 'Local' : 'z-ai';
-      const providerColor = panelProvider === 'openrouter' ? '#60a5fa' : panelProvider === 'local' ? '#f59e0b' : '#4ade80';
+      const providerLabel = panelProvider === 'openrouter' ? 'OR' : panelProvider === 'local' ? 'Local' : panelProvider === 'gigachat' ? 'GC' : 'z-ai';
+      const providerColor = panelProvider === 'openrouter' ? '#60a5fa' : panelProvider === 'local' ? '#f59e0b' : panelProvider === 'gigachat' ? '#21c55d' : '#4ade80';
 
       modelBarHtml = `
         <div class="model-bar">
           <label for="model-selector">Модель:</label>
           <select class="model-select" id="model-selector">
             <optgroup label="z-ai">${zaiOptions}</optgroup>
+            <optgroup label="GigaChat">${gcOptions}</optgroup>
             <optgroup label="Local">${localOptions}</optgroup>
             <optgroup label="OpenRouter">${orOptions}</optgroup>
           </select>
