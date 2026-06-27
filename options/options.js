@@ -212,16 +212,22 @@ async function handleGenerate() {
   DOM.resultGroup.style.display = 'none';
 
   try {
+    const payload = {
+      provider: settings.provider,
+      apiKey: providerSettings.apiKey,
+      model,
+      systemPrompt,
+      userMessage,
+      baseUrl: providerSettings.baseUrl,
+    };
+    // Для GigaChat передаём credentials отдельно
+    if (settings.provider === 'gigachat') {
+      payload.gigachatClientId = providerSettings.gigachatClientId || '';
+      payload.gigachatClientSecret = providerSettings.gigachatClientSecret || '';
+    }
     const response = await chrome.runtime.sendMessage({
       type: 'CHAT_REQUEST',
-      payload: {
-        provider: settings.provider,
-        apiKey: providerSettings.apiKey,
-        model,
-        systemPrompt,
-        userMessage,
-        baseUrl: providerSettings.baseUrl,
-      },
+      payload,
     });
     if (!response.success) { showError(response.error); return; }
     DOM.resultText.textContent = response.data;
@@ -962,7 +968,7 @@ async function handleAnalyze() {
 
   const settings = await Storage.getSettings();
   const providerSettings = Storage.getProviderSettings(settings);
-  if (!providerSettings.apiKey) {
+  if (!providerSettings.apiKey && settings.provider !== 'local' && settings.provider !== 'gigachat') {
     showAnalyzeError('API ключ не настроен. Перейдите в «Настройки».');
     return;
   }
@@ -1520,15 +1526,23 @@ async function handleAddAnalyzedTheses() {
 // ── Общие утилиты анализа ───────────────────
 
 async function sendChatRequest(settings, model, systemPrompt, userMessage) {
+  const ps = Storage.getProviderSettings(settings);
+  const payload = {
+    provider: settings.provider,
+    apiKey: Storage.getApiKey(settings),
+    model,
+    systemPrompt,
+    userMessage,
+    baseUrl: ps.baseUrl,
+  };
+  // Для GigaChat передаём credentials отдельно
+  if (settings.provider === 'gigachat') {
+    payload.gigachatClientId = ps.gigachatClientId || '';
+    payload.gigachatClientSecret = ps.gigachatClientSecret || '';
+  }
   const response = await chrome.runtime.sendMessage({
     type: 'CHAT_REQUEST',
-    payload: {
-      provider: settings.provider,
-      apiKey: Storage.getApiKey(settings),
-      model,
-      systemPrompt,
-      userMessage,
-    },
+    payload,
   });
 
   if (!response.success) {
@@ -1576,16 +1590,27 @@ function setupSettingsTab() {
     DOM.apiKeyInput.value = ps.apiKey || '';
     DOM.customModelInput.value = ps.customModelInput || '';
     if (ps.model) DOM.modelSelect.value = ps.model;
-    // Показать/скрыть настройки локального сервера
+    // Показать/скрыть настройки провайдера (local / gigachat / обычный)
     const localSettings = document.getElementById('local-settings');
+    const gigachatSettings = document.getElementById('gigachat-settings');
     const apiKeyGroup = DOM.apiKeyInput?.closest('.field-group');
     if (newProvider === 'local') {
       if (localSettings) localSettings.style.display = '';
+      if (gigachatSettings) gigachatSettings.style.display = 'none';
       const baseUrlInput = document.getElementById('local-base-url');
       if (baseUrlInput) baseUrlInput.value = ps.baseUrl || 'http://turbo:8080';
       if (apiKeyGroup) apiKeyGroup.style.display = 'none'; // API ключ не обязателен
+    } else if (newProvider === 'gigachat') {
+      if (localSettings) localSettings.style.display = 'none';
+      if (gigachatSettings) gigachatSettings.style.display = '';
+      if (apiKeyGroup) apiKeyGroup.style.display = 'none'; // GigaChat использует CLIENT_ID/SECRET
+      const gcIdInput = document.getElementById('gigachat-client-id');
+      const gcSecretInput = document.getElementById('gigachat-client-secret');
+      if (gcIdInput) gcIdInput.value = ps.gigachatClientId || '';
+      if (gcSecretInput) gcSecretInput.value = ps.gigachatClientSecret || '';
     } else {
       if (localSettings) localSettings.style.display = 'none';
+      if (gigachatSettings) gigachatSettings.style.display = 'none';
       if (apiKeyGroup) apiKeyGroup.style.display = '';
     }
   });

@@ -60,9 +60,15 @@
       { id: 'gemma-4-26b', name: 'Gemma 4 26B' },
     ],
     'gigachat': [
+      { id: 'GigaChat-2-Max', name: 'GigaChat-2 Max' },
+      { id: 'GigaChat-Max', name: 'GigaChat Max' },
+      { id: 'GigaChat-2-Pro', name: 'GigaChat-2 Pro' },
+      { id: 'GigaChat-Pro', name: 'GigaChat Pro' },
       { id: 'GigaChat-2', name: 'GigaChat-2' },
-      { id: 'GigaChat-2-mini', name: 'GigaChat-2 Mini' },
       { id: 'GigaChat', name: 'GigaChat' },
+      { id: 'GigaChat-Plus', name: 'GigaChat Plus' },
+      { id: 'GigaChat-2-Lite', name: 'GigaChat-2 Lite' },
+      { id: 'GigaChat-Lite', name: 'GigaChat Lite' },
     ],
     'openrouter': [
       { id: 'google/gemma-4-31b-it', name: 'Gemma 4 31B IT' },
@@ -349,6 +355,8 @@
           systemPrompt: SELECT_SYSTEM_PROMPT,
           userMessage: buildSelectUserMessage(context.postText, theses),
           baseUrl: ps.baseUrl,
+          gigachatClientId: ps.gigachatClientId || '',
+          gigachatClientSecret: ps.gigachatClientSecret || '',
         },
       });
 
@@ -524,6 +532,8 @@
           systemPrompt: KEYWORDS_SYSTEM_PROMPT,
           userMessage: context.postText || '(без текста)',
           baseUrl: ps.baseUrl,
+          gigachatClientId: ps.gigachatClientId || '',
+          gigachatClientSecret: ps.gigachatClientSecret || '',
         },
       });
 
