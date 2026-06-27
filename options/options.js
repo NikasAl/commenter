@@ -220,10 +220,9 @@ async function handleGenerate() {
       userMessage,
       baseUrl: providerSettings.baseUrl,
     };
-    // Для GigaChat передаём credentials отдельно
+    // Для GigaChat передаём готовый ключ авторизации
     if (settings.provider === 'gigachat') {
-      payload.gigachatClientId = providerSettings.gigachatClientId || '';
-      payload.gigachatClientSecret = providerSettings.gigachatClientSecret || '';
+      payload.gigachatAuthKey = providerSettings.gigachatAuthKey || '';
     }
     const response = await chrome.runtime.sendMessage({
       type: 'CHAT_REQUEST',
@@ -1535,10 +1534,9 @@ async function sendChatRequest(settings, model, systemPrompt, userMessage) {
     userMessage,
     baseUrl: ps.baseUrl,
   };
-  // Для GigaChat передаём credentials отдельно
+  // Для GigaChat передаём готовый ключ авторизации
   if (settings.provider === 'gigachat') {
-    payload.gigachatClientId = ps.gigachatClientId || '';
-    payload.gigachatClientSecret = ps.gigachatClientSecret || '';
+    payload.gigachatAuthKey = ps.gigachatAuthKey || '';
   }
   const response = await chrome.runtime.sendMessage({
     type: 'CHAT_REQUEST',
@@ -1603,11 +1601,9 @@ function setupSettingsTab() {
     } else if (newProvider === 'gigachat') {
       if (localSettings) localSettings.style.display = 'none';
       if (gigachatSettings) gigachatSettings.style.display = '';
-      if (apiKeyGroup) apiKeyGroup.style.display = 'none'; // GigaChat использует CLIENT_ID/SECRET
-      const gcIdInput = document.getElementById('gigachat-client-id');
-      const gcSecretInput = document.getElementById('gigachat-client-secret');
-      if (gcIdInput) gcIdInput.value = ps.gigachatClientId || '';
-      if (gcSecretInput) gcSecretInput.value = ps.gigachatClientSecret || '';
+      if (apiKeyGroup) apiKeyGroup.style.display = 'none'; // GigaChat использует свой ключ
+      const gcKeyInput = document.getElementById('gigachat-auth-key');
+      if (gcKeyInput) gcKeyInput.value = ps.gigachatAuthKey || '';
     } else {
       if (localSettings) localSettings.style.display = 'none';
       if (gigachatSettings) gigachatSettings.style.display = 'none';
@@ -1651,10 +1647,8 @@ async function loadSettings() {
     if (localSettings) localSettings.style.display = 'none';
     if (gigachatSettings) gigachatSettings.style.display = '';
     if (apiKeyGroup) apiKeyGroup.style.display = 'none';
-    const gcIdInput = document.getElementById('gigachat-client-id');
-    const gcSecretInput = document.getElementById('gigachat-client-secret');
-    if (gcIdInput) gcIdInput.value = ps.gigachatClientId || '';
-    if (gcSecretInput) gcSecretInput.value = ps.gigachatClientSecret || '';
+    const gcKeyInput = document.getElementById('gigachat-auth-key');
+    if (gcKeyInput) gcKeyInput.value = ps.gigachatAuthKey || '';
   } else {
     if (localSettings) localSettings.style.display = 'none';
     if (gigachatSettings) gigachatSettings.style.display = 'none';
@@ -1692,12 +1686,10 @@ async function saveSettings() {
     const baseUrlInput = document.getElementById('local-base-url');
     settings.providers[provider].baseUrl = baseUrlInput ? baseUrlInput.value.trim().replace(/\/+$/, '') : 'http://turbo:8080';
   }
-  // Сохраняем credentials для GigaChat
+  // Сохраняем ключ авторизации для GigaChat
   if (provider === 'gigachat') {
-    const gcIdInput = document.getElementById('gigachat-client-id');
-    const gcSecretInput = document.getElementById('gigachat-client-secret');
-    if (gcIdInput) settings.providers[provider].gigachatClientId = gcIdInput.value.trim();
-    if (gcSecretInput) settings.providers[provider].gigachatClientSecret = gcSecretInput.value.trim();
+    const gcKeyInput = document.getElementById('gigachat-auth-key');
+    if (gcKeyInput) settings.providers[provider].gigachatAuthKey = gcKeyInput.value.trim();
   }
   await Storage.saveSettings(settings);
   DOM.settingsSavedToast.style.display = 'block';

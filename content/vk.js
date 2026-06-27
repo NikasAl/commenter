@@ -265,8 +265,7 @@
           systemPrompt: lastBuiltPrompt.systemPrompt,
           userMessage: lastBuiltPrompt.userMessage,
           baseUrl: ps.baseUrl,
-          gigachatClientId: ps.gigachatClientId || '',
-          gigachatClientSecret: ps.gigachatClientSecret || '',
+          gigachatAuthKey: ps.gigachatAuthKey || '',
         },
       });
 
@@ -355,8 +354,7 @@
           systemPrompt: SELECT_SYSTEM_PROMPT,
           userMessage: buildSelectUserMessage(context.postText, theses),
           baseUrl: ps.baseUrl,
-          gigachatClientId: ps.gigachatClientId || '',
-          gigachatClientSecret: ps.gigachatClientSecret || '',
+          gigachatAuthKey: ps.gigachatAuthKey || '',
         },
       });
 
@@ -532,8 +530,7 @@
           systemPrompt: KEYWORDS_SYSTEM_PROMPT,
           userMessage: context.postText || '(без текста)',
           baseUrl: ps.baseUrl,
-          gigachatClientId: ps.gigachatClientId || '',
-          gigachatClientSecret: ps.gigachatClientSecret || '',
+          gigachatAuthKey: ps.gigachatAuthKey || '',
         },
       });
 

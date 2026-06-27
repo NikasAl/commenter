@@ -42,7 +42,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
  * Обработка чат-запроса к LLM
  */
 async function handleChatRequest(payload) {
-  const { provider: providerName, apiKey, model, systemPrompt, userMessage, baseUrl, gigachatClientId, gigachatClientSecret } = payload;
+  const { provider: providerName, apiKey, model, systemPrompt, userMessage, baseUrl, gigachatAuthKey } = payload;
   const provider = providers[providerName];
 
   if (!provider) {
@@ -54,10 +54,10 @@ async function handleChatRequest(payload) {
     provider.setBaseUrl(baseUrl);
   }
 
-  // Для GigaChat формируем apiKey как JSON с clientId/clientSecret
+  // Для GigaChat передаём готовый ключ авторизации напрямую как apiKey
   let effectiveApiKey = apiKey;
   if (providerName === 'gigachat') {
-    effectiveApiKey = JSON.stringify({ clientId: gigachatClientId || '', clientSecret: gigachatClientSecret || '' });
+    effectiveApiKey = gigachatAuthKey || '';
   }
 
   // Локальный и GigaChat провайдеры могут работать без обычного API ключа

@@ -385,11 +385,9 @@
 
       <!-- Настройки GigaChat (только для gigachat) -->
       <div id="gigachat-settings" class="field-group" style="display:none">
-        <label class="field-label" for="gigachat-client-id">CLIENT_ID</label>
-        <input type="text" id="gigachat-client-id" class="field-input" placeholder="Ваш CLIENT_ID от developers.sber.ru"/>
-        <label class="field-label" for="gigachat-client-secret" style="margin-top:10px">CLIENT_SECRET</label>
-        <input type="password" id="gigachat-client-secret" class="field-input" placeholder="Ваш CLIENT_SECRET от developers.sber.ru"/>
-        <p class="field-hint">Данные авторизации из личного кабинета <a href="https://developers.sber.ru/studio/workspaces/my-space/get/gigachat-api" target="_blank" style="color:var(--accent)">developers.sber.ru</a>. Scope: GIGACHAT_API_PERS.</p>
+        <label class="field-label" for="gigachat-auth-key">Ключ авторизации (Authorization Key)</label>
+        <input type="password" id="gigachat-auth-key" class="field-input" placeholder="Вставьте готовый ключ из личного кабинета Sber"/>
+        <p class="field-hint">Готовый Base64-ключ из раздела <a href="https://developers.sber.ru/studio/workspaces/my-space/get/gigachat-api" target="_blank" style="color:var(--accent)">developers.sber.ru</a> → GigaChat API → «Ключ авторизации». Scope: GIGACHAT_API_PERS.</p>
       </div>
 
       <div class="field-group">
