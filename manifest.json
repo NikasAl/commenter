@@ -37,7 +37,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://vk.com/*"],
+      "matches": ["*://vk.com/*", "*://vk.ru/*"],
       "js": ["content/vk.js"],
       "run_at": "document_idle"
     }

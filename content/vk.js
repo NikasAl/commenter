@@ -102,9 +102,33 @@
   //  ИНИЦИАЛИЗАЦИЯ
   // ═══════════════════════════════════════════
 
-  console.log('[Commenter] VK content script loaded');
-  document.addEventListener('focusin', onFocusIn);
-  document.addEventListener('keydown', onKeyDown);
+  console.log('[Commenter] VK content script loaded on', location.hostname);
+  document.addEventListener('focusin', onFocusIn, true);
+  document.addEventListener('keydown', onKeyDown, true);
+
+  // VK использует SPA-навигацию — при смене страницы DOM заменяется,
+  // и document-level слушатели могут перестать работать.
+  // Следим за изменениями в #spa_root и при крупных перестройках
+  // переназначаем слушатели.
+  let _spaObserver = null;
+  function ensureSpaListeners() {
+    const spaRoot = document.getElementById('spa_root');
+    if (!spaRoot || _spaObserver) return;
+    _spaObserver = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.addedNodes.length > 3 || m.removedNodes.length > 3) {
+          // Крупное изменение DOM (SPA-переход) — сбрасываем кэш поля
+          console.log('[Commenter] SPA navigation detected, resetting field cache');
+          lastFocusedField = null;
+          break;
+        }
+      }
+    });
+    _spaObserver.observe(spaRoot, { childList: true, subtree: false });
+  }
+  // Запускаем через небольшой таймаут, т.к. spa_root может ещё не существовать
+  setTimeout(ensureSpaListeners, 1000);
+  setTimeout(ensureSpaListeners, 5000);
 
   // ── Отслеживание фокуса ──────────────────
 
@@ -1319,7 +1343,12 @@
    */
   function extractTextFromShowMore(showMoreEl) {
     if (!showMoreEl) return '';
-    // Ищем дочерний элемент с классом содержащим vkitFeedShowMoreText__text
+    // vk.ru (2025+): текст внутри вложенного div[data-testid="showmoretext-in"]
+    const innerEl = showMoreEl.querySelector('[data-testid="showmoretext-in"]');
+    if (innerEl) {
+      return innerEl.textContent.trim();
+    }
+    // vk.com (старый): дочерний элемент с классом содержащим vkitFeedShowMoreText__text
     const textEl = showMoreEl.querySelector('[class*="vkitFeedShowMoreText__text"]');
     if (textEl) {
       return textEl.textContent.trim();
@@ -1370,12 +1399,17 @@
    * внутри которого текст вида "ответ Алле".
    */
   function extractReplyToName(containerEl) {
-    // Ищем элемент с классом vkitCommentReplyTarget
+    // VK 2025 (vk.ru): ищем data-testid="comment-reply-to"
+    const replyToEl = containerEl.querySelector('[data-testid="comment-reply-to"]');
+    if (replyToEl) {
+      const text = replyToEl.textContent.trim();
+      const match = text.match(/(?:ответ[уе]?)\s+(.+)/i);
+      return match ? match[1].trim() : text;
+    }
+    // VK (старый): ищем элемент с классом vkitCommentReplyTarget
     const replyTargetEl = containerEl.querySelector('[class*="vkitCommentReplyTarget"]');
     if (replyTargetEl) {
       const text = replyTargetEl.textContent.trim();
-      // Формат: "ответ Имя" или "ответу Имя" или просто имя
-      // Убираем "ответ"/"ответу" и пробелы
       const match = text.match(/(?:ответ[уе]?)\s+(.+)/i);
       return match ? match[1].trim() : text;
     }
@@ -1553,8 +1587,14 @@
 
   function insertIntoField(field, text) {
     field.focus();
-    // Очищаем текущее содержимое
-    field.innerHTML = '';
+    // Выделяем всё содержимое и удаляем через execCommand
+    // (безопаснее для React/VKUI, чем field.innerHTML = '')
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(field);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('delete', false);
     // Вставляем текст через execCommand — VK реагирует на input события
     document.execCommand('insertText', false, text);
     // Триггерим input событие для VK-овых React-обработчиков
