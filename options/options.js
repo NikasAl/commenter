@@ -449,6 +449,7 @@ function renderThesisEditForm(cardEl, index) {
       <label>Картинка</label>
       <input type="file" class="thesis-image-file-input" accept="image/*" style="display:none"/>
       <button class="btn btn-ghost btn-sm thesis-img-add-btn">📎 Добавить</button>
+      <span class="paste-hint">или Ctrl+V</span>
       ${imgHtml}
     </div>
     <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end;">
@@ -483,6 +484,44 @@ function renderThesisEditForm(cardEl, index) {
   cardEl.querySelector('.thesis-img-remove-btn')?.addEventListener('click', () => {
     editImageData = '';
     imgPreview.remove();
+  });
+
+  // Helper to show image preview in the card
+  function updateImagePreview(dataUrl) {
+    editImageData = dataUrl;
+    const imgContainer = cardEl.querySelector('.thesis-image-group');
+    const oldPreview = cardEl.querySelector('.thesis-edit-image-preview');
+    if (oldPreview) oldPreview.remove();
+    if (!dataUrl) return;
+    const prevDiv = document.createElement('div');
+    prevDiv.className = 'thesis-edit-image-preview';
+    prevDiv.innerHTML = `<img src="${dataUrl}" alt=""/><button class="btn btn-ghost btn-sm thesis-img-remove-btn">Удалить</button>`;
+    imgContainer.appendChild(prevDiv);
+    prevDiv.querySelector('.thesis-img-remove-btn').addEventListener('click', () => {
+      editImageData = '';
+      prevDiv.remove();
+    });
+  }
+
+  // ── Вставка картинки из буфера обмена (Ctrl+V) ──
+  cardEl.addEventListener('paste', async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        try {
+          const dataUrl = await compressImageForOptions(file);
+          updateImagePreview(dataUrl);
+          cardEl.querySelector('.thesis-img-add-btn').style.display = 'none';
+        } catch (err) {
+          console.warn('[Options] Paste image error:', err);
+        }
+        return; // only first image
+      }
+    }
   });
 
   cardEl.querySelector('.thesis-cancel-btn').addEventListener('click', () => renderThesesEditor());

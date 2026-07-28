@@ -362,6 +362,7 @@ body {
   border-radius: var(--radius-sm); outline: none; resize: vertical; min-height: 40px; transition: var(--transition);
 }
 .thesis-input-group textarea:focus { border-color: var(--border-focus); box-shadow: 0 0 0 2px var(--accent-subtle); }
+.paste-hint { font-size: 10px; color: var(--text-muted); }
 
 /* ── Пустые состояния ─────────────────────── */
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 16px; color: var(--text-muted); text-align: center; gap: 10px; }

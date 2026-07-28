@@ -1150,6 +1150,7 @@
           <div class="thesis-image-area">
             <input type="file" id="thesis-image-input" accept="image/*" style="display:none"/>
             <button class="panel-btn btn-add-image" id="btn-add-image">📎 Добавить картинку</button>
+            <span class="paste-hint">или Ctrl+V</span>
             <div id="thesis-image-preview" class="thesis-image-preview" style="display:none">
               <img id="thesis-image-thumb" class="thesis-image-thumb" alt=""/>
               <button class="panel-btn btn-remove-image" id="btn-remove-image" title="Удалить">✕</button>
@@ -1211,6 +1212,32 @@
       imageThumb.src = '';
       imagePreview.style.display = 'none';
       panel.querySelector('#btn-add-image').style.display = '';
+    });
+
+    // ── Вставка картинки из буфера обмена (Ctrl+V) ──
+    const thesisForm = panel.querySelector('.thesis-form');
+    thesisForm.addEventListener('paste', async (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          e.stopPropagation();
+          const file = item.getAsFile();
+          if (!file) continue;
+          try {
+            const dataUrl = await compressImage(file, 640, 0.75);
+            thesisImageData = dataUrl;
+            imageThumb.src = dataUrl;
+            imagePreview.style.display = 'flex';
+            panel.querySelector('#btn-add-image').style.display = 'none';
+            console.log('[Commenter] Image pasted from clipboard:', `${Math.round(dataUrl.length / 1024)}KB`);
+          } catch (err) {
+            console.warn('[Commenter] Paste image error:', err);
+          }
+          return; // only first image
+        }
+      }
     });
 
     // Clear form
@@ -1900,6 +1927,7 @@
       font-size: 11px !important; padding: 2px 6px !important;
       color: #ef4444 !important; background: rgba(239,68,68,0.1) !important;
     }
+    .paste-hint { font-size: 10px; color: #888; }
     .thesis-status {
       margin-top: 8px; padding: 0; font-size: 11px; font-weight: 600;
       min-height: 0; transition: all 0.2s;
