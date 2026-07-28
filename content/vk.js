@@ -691,9 +691,10 @@
       const checked = selectedIds.has(t.id) ? ' checked' : '';
       const qShort = escapeHtml(t.question.length > 55 ? t.question.slice(0, 55) + '...' : t.question);
       const aShort = escapeHtml(t.answer.length > 55 ? t.answer.slice(0, 55) + '...' : t.answer);
+      const imgHtml = t.image ? `<img class="ts-thumb" src="${t.image}" alt=""/>` : '';
       return `<label class="ts-item${selectedIds.has(t.id) ? ' ts-checked' : ''}">
         <input type="checkbox" class="ts-cb" data-tid="${escapeHtml(t.id)}"${checked}>
-        <span class="ts-text"><strong>${i + 1}.</strong> В: ${qShort} | О: ${aShort}</span>
+        <span class="ts-text"><strong>${i + 1}.</strong> В: ${qShort} | О: ${aShort}</span>${imgHtml}
       </label>`;
     }).join('');
 
@@ -977,6 +978,7 @@
       return `<label class="ts-item${selectedThesisIds.has(t.id) ? ' ts-checked' : ''}"${hiddenStyle}>
         <input type="checkbox" class="ts-cb" data-tid="${escapeHtml(t.id)}"${checked}>
         <span class="ts-text"><strong>${i + 1}.</strong> В: ${qShort} | О: ${aShort}</span>
+        ${t.image ? `<img class="ts-thumb" src="${t.image}" alt=""/>` : ''}
       </label>`;
     }).join('');
 
@@ -1143,6 +1145,17 @@
           <label for="thesis-answer">Ответ</label>
           <textarea class="form-textarea" id="thesis-answer" rows="3" placeholder="Ответ / аргумент..."></textarea>
         </div>
+        <div class="form-row thesis-image-row">
+          <label>Картинка</label>
+          <div class="thesis-image-area">
+            <input type="file" id="thesis-image-input" accept="image/*" style="display:none"/>
+            <button class="panel-btn btn-add-image" id="btn-add-image">📎 Добавить картинку</button>
+            <div id="thesis-image-preview" class="thesis-image-preview" style="display:none">
+              <img id="thesis-image-thumb" class="thesis-image-thumb" alt=""/>
+              <button class="panel-btn btn-remove-image" id="btn-remove-image" title="Удалить">✕</button>
+            </div>
+          </div>
+        </div>
         ${clipboardText ? `<div class="clipboard-hint">Из буфера обмена вставлен в поле "Вопрос". Переместите текст при необходимости.</div>` : '<div class="clipboard-hint">Буфер обмена пуст. Скопируйте текст на странице (Ctrl+C), затем откройте форму.</div>'}
         <div class="form-actions">
           <button class="panel-btn panel-btn-save btn-save-thesis">Сохранить тезис</button>
@@ -1167,11 +1180,48 @@
       if (topicSelect.value === '__new__') newTopicInput.focus();
     });
 
+    // ── Картинка ──
+    const imageInput = panel.querySelector('#thesis-image-input');
+    const imagePreview = panel.querySelector('#thesis-image-preview');
+    const imageThumb = panel.querySelector('#thesis-image-thumb');
+    let thesisImageData = ''; // base64 data URL
+
+    panel.querySelector('#btn-add-image')?.addEventListener('click', () => {
+      imageInput.click();
+    });
+
+    imageInput?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const dataUrl = await compressImage(file, 640, 0.75);
+        thesisImageData = dataUrl;
+        imageThumb.src = dataUrl;
+        imagePreview.style.display = 'flex';
+        panel.querySelector('#btn-add-image').style.display = 'none';
+        console.log('[Commenter] Image loaded:', file.name, `${Math.round(dataUrl.length / 1024)}KB`);
+      } catch (err) {
+        console.warn('[Commenter] Image load error:', err);
+      }
+      imageInput.value = '';
+    });
+
+    panel.querySelector('#btn-remove-image')?.addEventListener('click', () => {
+      thesisImageData = '';
+      imageThumb.src = '';
+      imagePreview.style.display = 'none';
+      panel.querySelector('#btn-add-image').style.display = '';
+    });
+
     // Clear form
     panel.querySelector('.btn-clear-form')?.addEventListener('click', () => {
       panel.querySelector('#thesis-question').value = '';
       panel.querySelector('#thesis-answer').value = '';
       if (topicSelect.value === '__new__') newTopicInput.value = '';
+      thesisImageData = '';
+      imageThumb.src = '';
+      imagePreview.style.display = 'none';
+      panel.querySelector('#btn-add-image').style.display = '';
     });
 
     // Save thesis
@@ -1220,6 +1270,8 @@
         id: generateId(),
         question: question,
         answer: answer,
+        image: thesisImageData || '',
+        createdAt: Date.now(),
       };
       targetTopic.theses.push(newThesis);
 
@@ -1239,8 +1291,12 @@
       // Clear fields for quick entry of next thesis
       panel.querySelector('#thesis-question').value = '';
       panel.querySelector('#thesis-answer').value = '';
+      thesisImageData = '';
+      imageThumb.src = '';
+      imagePreview.style.display = 'none';
+      panel.querySelector('#btn-add-image').style.display = '';
 
-      console.log('[Commenter] Thesis saved:', { topic: topicName, question: question?.slice(0, 60), answer: answer?.slice(0, 60) });
+      console.log('[Commenter] Thesis saved:', { topic: topicName, question: question?.slice(0, 60), answer: answer?.slice(0, 60), hasImage: !!thesisImageData });
     });
 
     // Close
@@ -1709,8 +1765,9 @@
     .ts-item {
       display: flex; align-items: flex-start; gap: 6px; padding: 5px 14px;
       border-bottom: 1px solid rgba(58,59,66,0.4); cursor: pointer;
-      transition: background 0.1s;
+      transition: background 0.1s; flex-wrap: wrap;
     }
+    .ts-thumb { max-width: 48px; max-height: 36px; border-radius: 3px; object-fit: cover; margin-left: auto; flex-shrink: 0; }
     .ts-item:last-child { border-bottom: none; }
     .ts-item:hover { background: rgba(99,102,241,0.04); }
     .ts-item.ts-checked { background: rgba(99,102,241,0.06); }
@@ -1828,6 +1885,20 @@
     .clipboard-hint {
       margin-top: 8px; padding: 6px 8px; font-size: 11px; color: #71717a;
       background: #25262b; border-radius: 5px; line-height: 1.5;
+    }
+    .thesis-image-row { margin-top: 6px; }
+    .thesis-image-area { display: flex; flex-direction: column; gap: 6px; }
+    .thesis-image-preview {
+      display: flex; align-items: center; gap: 8px;
+      background: #25262b; border-radius: 5px; padding: 4px;
+    }
+    .thesis-image-thumb {
+      max-width: 100px; max-height: 80px; border-radius: 4px; object-fit: cover;
+    }
+    .btn-add-image { font-size: 11px !important; padding: 4px 8px !important; }
+    .btn-remove-image {
+      font-size: 11px !important; padding: 2px 6px !important;
+      color: #ef4444 !important; background: rgba(239,68,68,0.1) !important;
     }
     .thesis-status {
       margin-top: 8px; padding: 0; font-size: 11px; font-weight: 600;
@@ -2237,6 +2308,35 @@
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  /**
+   * Сжать изображение до maxDim px, вернуть Promise<dataURL>.
+   * Использует canvas для resize + JPEG-сжатие.
+   */
+  function compressImage(file, maxDim, quality) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('FileReader error'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Image load error'));
+        img.onload = () => {
+          let w = img.width, h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+            else { w = Math.round(w * maxDim / h); h = maxDim; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
   }
 
   function logContext(ctx) {

@@ -429,6 +429,7 @@ function renderThesesEditor() {
       </div>
       <div class="thesis-question"><strong>В:</strong> ${escapeHtml(thesis.question)}</div>
       <div class="thesis-answer"><strong>О:</strong> ${escapeHtml(thesis.answer)}</div>
+      ${thesis.image ? `<div class="thesis-card-image"><img src="${thesis.image}" alt="Картинка тезиса"/></div>` : ''}
     `;
     card.querySelector('.thesis-edit-btn').addEventListener('click', () => renderThesisEditForm(card, index));
     card.querySelector('.thesis-delete-btn').addEventListener('click', () => { state.editingTheses.splice(index, 1); renderThesesEditor(); });
@@ -438,24 +439,62 @@ function renderThesesEditor() {
 
 function renderThesisEditForm(cardEl, index) {
   const thesis = state.editingTheses[index];
+  const imgHtml = thesis.image
+    ? `<div class="thesis-edit-image-preview"><img src="${thesis.image}" alt=""/><button class="btn btn-ghost btn-sm thesis-img-remove-btn">Удалить</button></div>`
+    : '';
   cardEl.innerHTML = `
     <div class="thesis-input-group"><label>Вопрос</label><textarea class="thesis-question-input" rows="2">${escapeHtml(thesis.question)}</textarea></div>
     <div class="thesis-input-group"><label>Ответ</label><textarea class="thesis-answer-input" rows="3">${escapeHtml(thesis.answer)}</textarea></div>
+    <div class="thesis-input-group thesis-image-group">
+      <label>Картинка</label>
+      <input type="file" class="thesis-image-file-input" accept="image/*" style="display:none"/>
+      <button class="btn btn-ghost btn-sm thesis-img-add-btn">📎 Добавить</button>
+      ${imgHtml}
+    </div>
     <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end;">
       <button class="btn btn-ghost btn-sm thesis-cancel-btn">Отмена</button>
       <button class="btn btn-primary btn-sm thesis-save-btn">Сохранить</button>
     </div>
   `;
+  // State for image data during edit
+  let editImageData = thesis.image || '';
+  const imgPreview = cardEl.querySelector('.thesis-edit-image-preview');
+  const fileInput = cardEl.querySelector('.thesis-image-file-input');
+
+  cardEl.querySelector('.thesis-img-add-btn')?.addEventListener('click', () => fileInput.click());
+  fileInput?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    editImageData = await compressImageForOptions(file);
+    // Re-render preview
+    const imgContainer = cardEl.querySelector('.thesis-image-group');
+    const oldPreview = cardEl.querySelector('.thesis-edit-image-preview');
+    if (oldPreview) oldPreview.remove();
+    const prevDiv = document.createElement('div');
+    prevDiv.className = 'thesis-edit-image-preview';
+    prevDiv.innerHTML = `<img src="${editImageData}" alt=""/><button class="btn btn-ghost btn-sm thesis-img-remove-btn">Удалить</button>`;
+    imgContainer.appendChild(prevDiv);
+    prevDiv.querySelector('.thesis-img-remove-btn').addEventListener('click', () => {
+      editImageData = '';
+      prevDiv.remove();
+    });
+    fileInput.value = '';
+  });
+  cardEl.querySelector('.thesis-img-remove-btn')?.addEventListener('click', () => {
+    editImageData = '';
+    imgPreview.remove();
+  });
+
   cardEl.querySelector('.thesis-cancel-btn').addEventListener('click', () => renderThesesEditor());
   cardEl.querySelector('.thesis-save-btn').addEventListener('click', () => {
     const q = cardEl.querySelector('.thesis-question-input').value.trim();
     const a = cardEl.querySelector('.thesis-answer-input').value.trim();
-    if (q && a) { state.editingTheses[index] = { ...thesis, question: q, answer: a }; renderThesesEditor(); }
+    if (q && a) { state.editingTheses[index] = { ...thesis, question: q, answer: a, image: editImageData }; renderThesesEditor(); }
   });
 }
 
 function addThesisRow() {
-  const newThesis = { id: Storage._generateId(), question: '', answer: '', createdAt: Date.now() };
+  const newThesis = { id: Storage._generateId(), question: '', answer: '', image: '', createdAt: Date.now() };
   state.editingTheses.push(newThesis);
   renderThesesEditor();
   const lastCard = DOM.thesesList.lastElementChild;
@@ -471,13 +510,13 @@ async function saveTopic() {
     if (existingTopic) {
       for (const oldThesis of existingTopic.theses) await Storage.deleteThesis(state.editingTopicId, oldThesis.id);
       for (const thesis of state.editingTheses) {
-        if (thesis.question.trim() && thesis.answer.trim()) await Storage.addThesis(state.editingTopicId, thesis.question, thesis.answer);
+        if (thesis.question.trim() && thesis.answer.trim()) await Storage.addThesis(state.editingTopicId, thesis.question, thesis.answer, thesis.image || '');
       }
     }
   } else {
     const topic = await Storage.addTopic(name);
     for (const thesis of state.editingTheses) {
-      if (thesis.question.trim() && thesis.answer.trim()) await Storage.addThesis(topic.id, thesis.question, thesis.answer);
+      if (thesis.question.trim() && thesis.answer.trim()) await Storage.addThesis(topic.id, thesis.question, thesis.answer, thesis.image || '');
     }
   }
   closeAllModals();
@@ -1811,6 +1850,31 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+function compressImageForOptions(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('FileReader error'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Image load error'));
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > 640 || h > 640) {
+          if (w > h) { h = Math.round(h * 640 / w); w = 640; }
+          else { w = Math.round(w * 640 / h); h = 640; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function showImportToast(message) {
